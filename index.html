@@ -18,7 +18,7 @@
   button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
   textarea{font-family:inherit;font-size:15px;border:none;outline:none;background:transparent;color:inherit;resize:none}
   input[type="file"]{display:none}
-  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes rec{0%,100%{opacity:1}50%{opacity:.3}}
 </style>
 </head>
 <body>
@@ -33,22 +33,114 @@ const LOGO_C = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA4QAAASNCAYAAAAb5p
 const YX_RED = "#CF122D";
 const YX_DARK = "#0C2340";
 
-/* ── SPEECH RECOGNITION HOOK ── */
-function useSpeech() {
-  const [listening, setListening] = useState(false);
-  const recRef = useRef(null);
-  const start = useCallback((onResult) => {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { alert("Tale støttes ikke i denne nettleseren"); return; }
-    const r = new SR();
-    r.lang = "nb-NO"; r.continuous = false; r.interimResults = false;
-    r.onresult = (e) => { const t = e.results[0][0].transcript; onResult(t); setListening(false); };
-    r.onerror = () => setListening(false);
-    r.onend = () => setListening(false);
-    recRef.current = r; r.start(); setListening(true);
+/* ── SCORE LABELS ── */
+const LABELS = {
+  5: [{v:0,l:"Ikke godkjent",c:"#dc2626"},{v:1,l:"Svakt",c:"#f97316"},{v:2,l:"Mangler",c:"#eab308"},{v:3,l:"OK",c:"#84cc16"},{v:4,l:"Bra",c:"#22c55e"},{v:5,l:"Godkjent",c:"#16a34a"}],
+  2: [{v:0,l:"Ikke godkjent",c:"#dc2626"},{v:1,l:"Delvis",c:"#eab308"},{v:2,l:"Godkjent",c:"#16a34a"}],
+  1: [{v:0,l:"Nei",c:"#dc2626"},{v:1,l:"Ja",c:"#16a34a"}],
+};
+
+/* ── AUDIO RECORDER HOOK ── */
+function useRecorder() {
+  const [recording, setRecording] = useState(false);
+  const mediaRef = useRef(null);
+  const chunksRef = useRef([]);
+
+  const start = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4' });
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mediaRef.current = mr;
+      mr.start();
+      setRecording(true);
+    } catch (e) {
+      alert("Kunne ikke starte opptak. Gi tilgang til mikrofon.");
+    }
   }, []);
-  const stop = useCallback(() => { recRef.current?.stop(); setListening(false); }, []);
-  return { listening, start, stop };
+
+  const stop = useCallback(() => {
+    return new Promise((resolve) => {
+      const mr = mediaRef.current;
+      if (!mr || mr.state === "inactive") { resolve(null); return; }
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
+        const reader = new FileReader();
+        reader.onloadend = () => { resolve(reader.result); };
+        reader.readAsDataURL(blob);
+        mr.stream.getTracks().forEach(t => t.stop());
+        setRecording(false);
+      };
+      mr.stop();
+    });
+  }, []);
+
+  return { recording, start, stop };
+}
+
+/* ── AUDIO BUTTON ── */
+function AudioBtn({ audioClip, onRecord, onDelete }) {
+  const { recording, start, stop } = useRecorder();
+  const audioRef = useRef();
+
+  const toggle = async () => {
+    if (recording) {
+      const data = await stop();
+      if (data) onRecord(data);
+    } else {
+      start();
+    }
+  };
+
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <button onClick={toggle}
+        style={{padding:"6px 10px",borderRadius:6,fontSize:12,fontWeight:600,
+          background: recording ? YX_RED : "#f5f3ee",
+          color: recording ? "#fff" : "#666",
+          animation: recording ? "rec 1s infinite" : "none",
+          display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+        {recording ? "⏹ Stopp" : "🎙️ Notat"}
+      </button>
+      {audioClip && (
+        <>
+          <button onClick={() => { const a = audioRef.current; a && a.paused ? a.play() : a.pause(); }}
+            style={{padding:"6px 8px",borderRadius:6,fontSize:12,background:"#e8f5e9",color:"#2e7d32"}}>▶️</button>
+          <button onClick={onDelete}
+            style={{padding:"6px 8px",borderRadius:6,fontSize:12,background:"#fef5f5",color:"#c62828"}}>🗑</button>
+          <audio ref={audioRef} src={audioClip} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ── PHOTO COMPONENT ── */
+function PhotoCapture({ photos, onAdd, onRemove }) {
+  const ref = useRef();
+  const handleFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => onAdd(ev.target.result);
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+  return (
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+      {(photos||[]).map((p,i) => (
+        <div key={i} style={{position:"relative",width:52,height:52,borderRadius:8,overflow:"hidden"}}>
+          <img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}} />
+          <button onClick={()=>onRemove(i)} style={{position:"absolute",top:1,right:1,background:"rgba(0,0,0,.6)",color:"#fff",borderRadius:10,width:18,height:18,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        </div>
+      ))}
+      <button onClick={()=>ref.current?.click()} style={{width:52,height:52,borderRadius:8,border:"2px dashed #ccc",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontSize:16,color:"#999",background:"#fafaf7"}}>
+        📷
+      </button>
+      <input ref={ref} type="file" accept="image/*" capture="environment" onChange={handleFile} />
+    </div>
+  );
 }
 
 /* ── DATA ── */
@@ -112,58 +204,12 @@ const RFC = [
 
 const MAX_TOTAL = RFC.reduce((s,c) => s + c.items.reduce((a,b) => a+b.max, 0), 0);
 const STATIONS = [{id:"s001",name:"YX Tønsberg"},{id:"s002",name:"YX Horten"},{id:"s003",name:"YX Sandefjord"},{id:"s004",name:"YX Larvik"},{id:"s005",name:"YX Brokelandsheia"},{id:"s006",name:"YX Sande"},{id:"s007",name:"YX Øvre Årdal"},{id:"s008",name:"YX Drammen"}];
-const KEY = "yx_kfk_v3";
+const KEY = "yx_kfk_v4";
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||"[]"); } catch { return []; } };
 const save = (v) => localStorage.setItem(KEY, JSON.stringify(v));
 const sc = (p) => p>=85?"#16a34a":p>=70?"#84cc16":p>=55?"#eab308":p>=40?"#f97316":"#dc2626";
 const sl = (p) => p>=85?"Utmerket":p>=70?"Godt":p>=55?"OK":p>=40?"Trenger oppfølging":"Kritisk";
 
-/* ── PHOTO COMPONENT ── */
-function PhotoCapture({ photos, onAdd, onRemove }) {
-  const ref = useRef();
-  const handleFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => onAdd(ev.target.result);
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-  return (
-    <div style={{marginTop:8}}>
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
-        {(photos||[]).map((p,i) => (
-          <div key={i} style={{position:"relative",width:56,height:56,borderRadius:8,overflow:"hidden"}}>
-            <img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}} />
-            <button onClick={()=>onRemove(i)} style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,.6)",color:"#fff",borderRadius:10,width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-          </div>
-        ))}
-        <button onClick={()=>ref.current?.click()} style={{width:56,height:56,borderRadius:8,border:"2px dashed #ccc",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontSize:18,color:"#999",background:"#fafaf7"}}>
-          📷
-          <span style={{fontSize:9,marginTop:2}}>Foto</span>
-        </button>
-      </div>
-      <input ref={ref} type="file" accept="image/*" capture="environment" onChange={handleFile} />
-    </div>
-  );
-}
-
-/* ── VOICE NOTE BUTTON ── */
-function VoiceBtn({ onResult }) {
-  const { listening, start, stop } = useSpeech();
-  return (
-    <button onClick={() => listening ? stop() : start(onResult)}
-      style={{padding:"6px 10px",borderRadius:6,fontSize:12,fontWeight:600,
-        background: listening ? YX_RED : "#f5f3ee",
-        color: listening ? "#fff" : "#666",
-        animation: listening ? "pulse 1s infinite" : "none",
-        display:"flex",alignItems:"center",gap:4}}>
-      🎙️ {listening ? "Lytter..." : "Tale"}
-    </button>
-  );
-}
-
-/* ── MAIN APP ── */
 function App() {
   const [view, setView] = useState("splash");
   const [role, setRole] = useState(null);
@@ -172,25 +218,25 @@ function App() {
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState({});
   const [photos, setPhotos] = useState({});
+  const [audio, setAudio] = useState({});
   const [visitNote, setVisitNote] = useState("");
   const [visits, setVisits] = useState(load());
-  const { listening: vListen, start: vStart, stop: vStop } = useSpeech();
 
   useEffect(() => { const t = setTimeout(() => view==="splash" && setView("roles"), 1800); return () => clearTimeout(t); }, []);
 
   const totalScore = Object.values(scores).reduce((s,v) => s+(v||0), 0);
   const totalPct = Math.round(totalScore / MAX_TOTAL * 100);
-  const photoCount = Object.values(photos).reduce((s,a) => s + (a?.length||0), 0);
+  const photoCount = Object.values(photos).reduce((s,a) => s+(a?.length||0), 0);
+  const audioCount = Object.values(audio).filter(Boolean).length;
 
   const submit = () => {
     const visit = {id:Date.now(),stationId:station.id,stationName:station.name,role,date:new Date().toISOString(),
-      scores:{...scores},notes:{...notes},visitNote,photoCount,
+      scores:{...scores},notes:{...notes},visitNote,photoCount,audioCount,
       total:totalScore,max:MAX_TOTAL,pct:totalPct};
     const u = [visit,...visits]; setVisits(u); save(u);
-    setScores({}); setNotes({}); setPhotos({}); setVisitNote(""); setCatIdx(0); setView("done");
+    setScores({}); setNotes({}); setPhotos({}); setAudio({}); setVisitNote(""); setCatIdx(0); setView("done");
   };
 
-  /* ── SPLASH ── */
   if (view==="splash") return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:YX_DARK}}>
       <img src={LOGO_W} alt="YX" style={{height:90,marginBottom:16}} />
@@ -199,7 +245,6 @@ function App() {
     </div>
   );
 
-  /* ── ROLES ── */
   if (view==="roles") return (
     <div style={{padding:"48px 24px",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
       <img src={LOGO_C} alt="YX" style={{height:56,alignSelf:"flex-start",marginBottom:8}} />
@@ -213,11 +258,10 @@ function App() {
           </button>
         ))}
       </div>
-      <div style={{marginTop:"auto",paddingTop:40,fontSize:11,color:"#bbb",textAlign:"center"}}>YX Norge AS · v3</div>
+      <div style={{marginTop:"auto",paddingTop:40,fontSize:11,color:"#bbb",textAlign:"center"}}>YX Norge AS · v4</div>
     </div>
   );
 
-  /* ── HOME ── */
   if (view==="home") return (
     <div style={{padding:"20px 20px 40px"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
@@ -236,17 +280,17 @@ function App() {
     </div>
   );
 
-  /* ── AUDIT ── */
   if (view==="audit"&&station) {
     const cat=RFC[catIdx], catMax=cat.items.reduce((s,i)=>s+i.max,0), catScore=cat.items.reduce((s,i)=>s+(scores[i.id]||0),0);
-    const isLast = catIdx === RFC.length-1;
+    const isLast = catIdx===RFC.length-1;
     return (
       <div style={{paddingBottom:120}}>
         <div style={{background:YX_DARK,color:"#fff",padding:"14px 18px",position:"sticky",top:0,zIndex:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <button onClick={()=>setView("home")} style={{color:"#aaa",fontSize:13}}>← Avbryt</button>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              {photoCount > 0 && <span style={{fontSize:11,color:"#7799bb"}}>📷 {photoCount}</span>}
+              {photoCount>0&&<span style={{fontSize:11,color:"#7799bb"}}>📷{photoCount}</span>}
+              {audioCount>0&&<span style={{fontSize:11,color:"#7799bb"}}>🎙️{audioCount}</span>}
               <span style={{fontSize:11,color:"#7799bb"}}>{catIdx+1}/{RFC.length}</span>
             </div>
           </div>
@@ -256,38 +300,43 @@ function App() {
             <div style={{height:"100%",background:YX_RED,width:`${(catIdx+1)/RFC.length*100}%`,transition:"width .3s"}}/>
           </div>
         </div>
-        <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
-          {cat.items.map(item=>{const val=scores[item.id]??null;return(
+        <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:12}}>
+          {cat.items.map(item=>{
+            const val=scores[item.id]??null;
+            const labels = LABELS[item.max] || LABELS[5];
+            return(
             <div key={item.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px"}}>
               <div style={{fontSize:14,fontWeight:600,marginBottom:10,color:YX_DARK}}>{item.text}</div>
-              <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-                {[...Array(item.max+1)].map((_,n)=>(
-                  <button key={n} onClick={()=>setScores(s=>({...s,[item.id]:n}))} style={{flex:"1 1 40px",minWidth:40,padding:"10px 0",borderRadius:8,background:val===n?YX_DARK:"#f5f3ee",color:val===n?"#fff":"#666",fontSize:14,fontWeight:700}}>{n}</button>
+              <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
+                {labels.map(lb=>(
+                  <button key={lb.v} onClick={()=>setScores(s=>({...s,[item.id]:lb.v}))}
+                    style={{flex:"1 1 0",minWidth:0,padding:"8px 4px",borderRadius:8,
+                      background:val===lb.v?lb.c:"#f5f3ee",
+                      color:val===lb.v?"#fff":"#666",
+                      fontSize:11,fontWeight:700,lineHeight:1.2,textAlign:"center"}}>
+                    {lb.l}
+                  </button>
                 ))}
               </div>
-              {role==="rs"&&<div style={{background:"#fef5f5",borderLeft:`3px solid ${YX_RED}`,padding:"8px 10px",borderRadius:4,fontSize:12,color:"#555",marginTop:4,marginBottom:4}}>💬 {item.talk}</div>}
-              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6}}>
+              {role==="rs"&&<div style={{background:"#fef5f5",borderLeft:`3px solid ${YX_RED}`,padding:"8px 10px",borderRadius:4,fontSize:12,color:"#555",marginBottom:6}}>💬 {item.talk}</div>}
+              <div style={{display:"flex",alignItems:"flex-start",gap:6,marginTop:4}}>
                 <textarea placeholder="Notat (valgfritt)" value={notes[item.id]||""} onChange={e=>setNotes(n=>({...n,[item.id]:e.target.value}))}
                   style={{flex:1,minHeight:36,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:13,color:"#444",background:"#fafaf7"}}/>
-                <VoiceBtn onResult={(t) => setNotes(n=>({...n,[item.id]:(n[item.id]||"")+(" "+t).trim()}))} />
+                <AudioBtn audioClip={audio[item.id]} onRecord={(d)=>setAudio(a=>({...a,[item.id]:d}))} onDelete={()=>setAudio(a=>({...a,[item.id]:null}))} />
               </div>
               <PhotoCapture
                 photos={photos[item.id]||[]}
-                onAdd={(data) => setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),data]}))}
-                onRemove={(idx) => setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}
+                onAdd={(data)=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),data]}))}
+                onRemove={(idx)=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}
               />
             </div>
           );})}
 
-          {/* General visit note on last category */}
-          {isLast && (
+          {isLast&&(
             <div style={{background:"#fff",border:"2px solid #eae7df",borderRadius:12,padding:"14px",marginTop:8}}>
-              <div style={{fontSize:14,fontWeight:700,color:YX_DARK,marginBottom:8}}>📝 Generelt notat for besøket</div>
-              <div style={{display:"flex",alignItems:"flex-start",gap:6}}>
-                <textarea placeholder="Oppsummering, avtaler, oppfølgingspunkter..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
-                  style={{flex:1,minHeight:80,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:13,color:"#444",background:"#fafaf7"}}/>
-                <VoiceBtn onResult={(t) => setVisitNote(v=>(v+" "+t).trim())} />
-              </div>
+              <div style={{fontSize:14,fontWeight:700,color:YX_DARK,marginBottom:8}}>📝 Oppsummering av besøket</div>
+              <textarea placeholder="Avtaler, oppfølgingspunkter, generelle observasjoner..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
+                style={{width:"100%",minHeight:80,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:13,color:"#444",background:"#fafaf7"}}/>
             </div>
           )}
         </div>
@@ -305,7 +354,6 @@ function App() {
     );
   }
 
-  /* ── DONE ── */
   if (view==="done") {const v=visits[0];return(
     <div style={{padding:"80px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
       <div style={{width:80,height:80,borderRadius:40,background:sc(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,marginBottom:20}}>✓</div>
@@ -313,12 +361,14 @@ function App() {
       <div style={{fontSize:22,fontWeight:800,marginTop:6,color:YX_DARK}}>{v.stationName}</div>
       <div style={{fontSize:64,fontWeight:900,color:sc(v.pct),marginTop:20,lineHeight:1}}>{v.pct}%</div>
       <div style={{fontSize:14,color:"#666",marginTop:6}}>{sl(v.pct)}</div>
-      {v.photoCount>0&&<div style={{fontSize:12,color:"#999",marginTop:8}}>📷 {v.photoCount} bilder dokumentert</div>}
+      <div style={{fontSize:12,color:"#999",marginTop:12,display:"flex",gap:12,justifyContent:"center"}}>
+        {v.photoCount>0&&<span>📷 {v.photoCount} bilder</span>}
+        {v.audioCount>0&&<span>🎙️ {v.audioCount} lydnotater</span>}
+      </div>
       <button onClick={()=>setView("home")} style={{marginTop:40,padding:"14px 32px",background:YX_DARK,color:"#fff",borderRadius:10,fontWeight:700,fontSize:15}}>Tilbake til stasjoner</button>
     </div>
   );}
 
-  /* ── DASHBOARD ── */
   if (view==="dash") {
     const bs=STATIONS.map(s=>{const sv=visits.filter(v=>v.stationId===s.id);return{...s,last:sv[0],count:sv.length};}).sort((a,b)=>(a.last?.pct||999)-(b.last?.pct||999));
     return(
