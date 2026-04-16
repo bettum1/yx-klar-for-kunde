@@ -469,14 +469,21 @@ function App(){
 
     return(
       <div style={{paddingBottom:130}}>
+        {/* Top banner — same as all pages */}
+        <div style={{background:D,padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <button onClick={cancelAudit} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>←</button>
+            <img src={LW} alt="YX" style={{height:22}}/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
+            <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
+          </div>
+        </div>
         {/* ── Journey Hero ── */}
-        <div style={{position:"relative",height:200,background:D,overflow:"hidden"}}>
+        <div style={{position:"relative",height:180,background:D,overflow:"hidden"}}>
           <img src={cat.img} alt="" style={{width:"100%",height:"100%",objectFit:"cover",opacity:.35}}/>
           <div style={{position:"absolute",inset:0,background:`linear-gradient(to top, ${D} 0%, transparent 60%)`}}/>
-          <div style={{position:"absolute",top:12,left:16,right:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <button onClick={cancelAudit} style={{color:"rgba(255,255,255,.7)",fontSize:13,fontWeight:600}}>← Avbryt</button>
-            <span style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>{station.name}</span>
-          </div>
           <div style={{position:"absolute",bottom:16,left:16,right:16}}>
             {/* Journey steps */}
             <div style={{display:"flex",gap:4,marginBottom:12}}>
