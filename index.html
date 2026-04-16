@@ -663,9 +663,14 @@ function App(){
     return(
       <div style={{paddingBottom:40}}>
         <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
-          <button onClick={()=>{setStationView(null);setView("home");}} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>← Tilbake</button>
-          <span style={{color:"#fff",fontSize:14,fontWeight:700}}>{sv.name}</span>
-          <button onClick={()=>{setStation(sv);setView("audit");}} style={{color:"#5577aa",fontSize:12,fontWeight:600}}>Nytt besøk</button>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <button onClick={()=>{setStationView(null);setView("home");}} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>←</button>
+            <img src={LW} alt="YX" style={{height:24}}/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
+            <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
+          </div>
         </div>
         <div style={{padding:"16px 20px"}}>
           {/* Station info */}
@@ -740,10 +745,15 @@ function App(){
 
     return(
       <div style={{paddingBottom:40}}>
-        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <button onClick={()=>setView("home")} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>← Tilbake</button>
-          <span style={{color:"#fff",fontSize:14,fontWeight:700}}>Dashboard</span>
-          <span style={{width:60}}/>
+        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <button onClick={()=>setView("home")} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>←</button>
+            <img src={LW} alt="YX" style={{height:24}}/>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
+            <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
+          </div>
         </div>
 
         <div style={{padding:"16px 20px"}}>
