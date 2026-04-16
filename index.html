@@ -847,7 +847,7 @@ function App(){
               allV.forEach(v=>{const s=v.scores?.[String(item.id)];if(s!==undefined&&!v.na_items?.includes(String(item.id))){tot+=s;cnt++;}});
               const avg=cnt>0?Math.round(tot/cnt*10)/10:null;
               const pct=cnt>0?Math.round(tot/(cnt*item.max)*100):null;
-              return{...item,avg,pct,cnt,area:j.icon};
+              return{...item,avg,pct,cnt,area:j.icon,areaName:j.name};
             })).filter(q=>q.pct!==null).sort((a,b)=>a.pct-b.pct);
             return(
               <div style={{marginBottom:20}}>
@@ -859,8 +859,8 @@ function App(){
                   <div key={q.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                       <div style={{flex:1,minWidth:0}}>
-                        <span style={{fontSize:12,marginRight:4}}>{q.area}</span>
                         <span style={{fontSize:12,fontWeight:700,color:D}}>{parts[0]}</span>
+                        <span style={{fontSize:10,color:"#999"}}> ({q.areaName})</span>
                         {parts[1]&&<span style={{fontSize:11,color:"#888"}}> — {parts[1]}</span>}
                       </div>
                       <div style={{flexShrink:0,textAlign:"right"}}>
