@@ -12,7 +12,7 @@
 <style>
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;overscroll-behavior:none}
-  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:#f0ede5;color:#141414;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:#f0ede5;color:#141414;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
   #root{min-height:100vh;max-width:800px;margin:0 auto;background:#fafaf7}
   @media(min-width:768px){
     #root{max-width:100%;padding:0}
@@ -135,7 +135,7 @@ function Voice({onText}){
 
   return(
     <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-      {interim&&<span style={{fontSize:11,color:"#999",fontStyle:"italic",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{interim}</span>}
+      {interim&&<span style={{fontSize:11,color:"#888",fontStyle:"italic",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{interim}</span>}
       <button onClick={state==='fallback'?stopFallback:start} style={{
         width:44,height:44,borderRadius:12,
         background:state!=='idle'?R:'#f0ede5',
@@ -359,11 +359,11 @@ function App(){
           <div style={{display:"flex",gap:8,marginBottom:14}}>
             <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px",textAlign:"center"}}>
               <div style={{fontSize:22,fontWeight:800,color:D}}>{yearRS.length}</div>
-              <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:1}}>RS-besøk i år</div>
+              <div style={{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:1}}>RS-besøk i år</div>
             </div>
             <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px",textAlign:"center"}}>
               <div style={{fontSize:22,fontWeight:800,color:yearVisits.length?pCol(Math.round(yearVisits.reduce((s,v)=>s+v.pct,0)/yearVisits.length)):D}}>{yearVisits.length?Math.round(yearVisits.reduce((s,v)=>s+v.pct,0)/yearVisits.length):0}%</div>
-              <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:1}}>Snitt i år</div>
+              <div style={{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:1}}>Snitt i år</div>
             </div>
             <button onClick={()=>setView("dash")} style={{flex:1,background:D,borderRadius:12,padding:"12px",textAlign:"center",color:"#fff"}}>
               <div style={{fontSize:18}}>📊</div>
@@ -389,12 +389,12 @@ function App(){
         <div style={{position:"relative",marginBottom:14}}>
           <input type="text" placeholder="Søk stasjon eller sted..." value={search} onChange={e=>setSearch(e.target.value)}
             style={{width:"100%",padding:"13px 40px 13px 16px",borderRadius:12,background:"#fff",border:"1px solid #eae7df",fontSize:15,color:"#333"}}/>
-          {search?<button onClick={()=>setSearch("")} style={{position:"absolute",right:14,top:13,fontSize:15,color:"#999"}}>✕</button>
+          {search?<button onClick={()=>setSearch("")} style={{position:"absolute",right:14,top:13,fontSize:15,color:"#888"}}>✕</button>
           :<span style={{position:"absolute",right:14,top:13,fontSize:15,color:"#ccc"}}>🔍</span>}
         </div>
 
         {/* Station count */}
-        <div style={{fontSize:12,color:"#999",marginBottom:8}}>{filt.length} stasjoner{search?` for «${search}»`:""}{loc?" · sortert etter avstand":""}</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:8}}>{filt.length} stasjoner{search?` for «${search}»`:""}{loc?" · sortert etter avstand":""}</div>
       </div>
 
       {/* Station list */}
@@ -413,7 +413,7 @@ function App(){
                       <span style={{fontWeight:700,fontSize:14,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
                       {distTxt&&<span style={{fontSize:11,fontWeight:600,color:B,flexShrink:0}}>({distTxt})</span>}
                     </div>
-                    <div style={{fontSize:11,color:"#999",marginTop:3,display:"flex",alignItems:"center",gap:4}}>
+                    <div style={{fontSize:11,color:"#888",marginTop:3,display:"flex",alignItems:"center",gap:4}}>
                       <span>{s.poststed}</span>
                       <span style={{fontSize:9,fontWeight:600,color:s.type==="automat"?"#d97706":"#059669",background:s.type==="automat"?"#fef3c7":"#d1fae5",padding:"1px 5px",borderRadius:3}}>{s.type==="automat"?"Automat":"Fullservice"}</span>
                     </div>
@@ -432,7 +432,7 @@ function App(){
             </button>
           )}
           {showAll&&filt.length>5&&(
-            <button onClick={()=>setShowAll(false)} style={{padding:"10px",fontSize:12,color:"#999",textAlign:"center"}}>
+            <button onClick={()=>setShowAll(false)} style={{padding:"10px",fontSize:12,color:"#888",textAlign:"center"}}>
               Vis færre ↑
             </button>
           )}
@@ -445,7 +445,7 @@ function App(){
           <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>Siste besøk</div>
           {myV.map(v=>{const sn=stations.find(s=>s.id===v.station_id);return sn?(
             <button key={v.id} onClick={()=>{setStationView(sn);setView("stationDetail");}} style={{width:"100%",background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
-              <div><div style={{fontSize:13,fontWeight:600,color:D}}>{sn.name}</div><div style={{fontSize:10,color:"#999"}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div></div>
+              <div><div style={{fontSize:13,fontWeight:600,color:D}}>{sn.name}</div><div style={{fontSize:10,color:"#888"}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div></div>
               <div style={{background:pCol(v.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700}}>{v.pct}%</div>
             </button>
           ):null;})}
@@ -512,7 +512,7 @@ function App(){
         {/* Reference image toggle */}
         <button onClick={()=>setShowRef(!showRef)} style={{width:"100%",padding:"10px 16px",background:"#fff",borderBottom:"1px solid #eae7df",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <span style={{fontSize:12,fontWeight:600,color:B}}>📐 Slik skal det se ut (kundereisen)</span>
-          <span style={{fontSize:11,color:"#999"}}>{showRef?"▲ Skjul":"▼ Vis"}</span>
+          <span style={{fontSize:11,color:"#888"}}>{showRef?"▲ Skjul":"▼ Vis"}</span>
         </button>
         {showRef&&<div style={{padding:16,background:"#f5f3ee"}}><img src={cat.img} style={{width:"100%",borderRadius:10,border:"2px solid #eae7df"}} alt="Referanse"/></div>}
 
@@ -533,7 +533,7 @@ function App(){
                 {/* Item number + text */}
                 <div style={{display:"flex",gap:10,marginBottom:10}}>
                   <div style={{width:28,height:28,borderRadius:8,background:val!=null?lFor(item.max,val).c+"18":D+"08",color:val!=null?lFor(item.max,val).c:D,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{item.id}</div>
-                  <div style={{fontSize:14,color:D,lineHeight:1.4}}>{item.t.includes(" — ")?<><span style={{fontWeight:800}}>{item.t.split(" — ")[0]}</span><span style={{fontWeight:400,color:"#555"}}> — {item.t.split(" — ").slice(1).join(" — ")}</span></>:<span style={{fontWeight:600}}>{item.t}</span>}</div>
+                  <div style={{fontSize:15,color:D,lineHeight:1.5}}>{item.t.includes(" — ")?<><span style={{fontWeight:800}}>{item.t.split(" — ")[0]}</span><span style={{fontWeight:400,color:"#555"}}> — {item.t.split(" — ").slice(1).join(" — ")}</span></>:<span style={{fontWeight:600}}>{item.t}</span>}</div>
                 </div>
 
                 {/* Self-eval badge for RS */}
@@ -560,7 +560,7 @@ function App(){
 
                 {/* Gap warning */}
                 {gap&&!ina&&(
-                  <div style={{fontSize:12,padding:"8px 12px",borderRadius:8,margin:"8px 0",background:"#fef2f2",color:"#991b1b",border:"1px solid #fecaca",fontWeight:500}}>
+                  <div style={{fontSize:13,padding:"10px 14px",borderRadius:8,margin:"8px 0",background:"#fef2f2",color:"#991b1b",border:"1px solid #fecaca",fontWeight:500}}>
                     ⚠️ Gap: stasjonen sier «{seL.l}», du sier «{myL.l}»
                   </div>
                 )}
@@ -569,7 +569,7 @@ function App(){
                 {isRS&&!ina&&(
                   <div style={{background:`linear-gradient(135deg, ${D}08, ${R}06)`,borderLeft:`4px solid ${R}`,padding:"10px 14px",borderRadius:"0 10px 10px 0",margin:"10px 0"}}>
                     <div style={{fontSize:10,fontWeight:700,color:R,textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>Samtalestart</div>
-                    <div style={{fontSize:13,color:"#444",fontWeight:500,lineHeight:1.4}}>«{item.q}»</div>
+                    <div style={{fontSize:14,color:"#333",fontWeight:500,lineHeight:1.5}}>«{item.q}»</div>
                   </div>
                 )}
 
@@ -577,7 +577,7 @@ function App(){
                 {!ina&&(
                   <div style={{display:"flex",alignItems:"flex-start",gap:6,marginTop:10}}>
                     <textarea placeholder="Notat..." value={GN(item.id)} onChange={e=>SN(item.id,e.target.value)}
-                      style={{flex:1,minHeight:40,border:"1px solid #eae7df",borderRadius:10,padding:"10px 12px",fontSize:14,color:"#444",background:"#fafaf7"}}/>
+                      style={{flex:1,minHeight:40,border:"1px solid #eae7df",borderRadius:10,padding:"10px 12px",fontSize:15,color:"#333",background:"#fafaf7"}}/>
                     <Voice onText={t=>SN(item.id,(GN(item.id)?GN(item.id)+" ":"")+t)}/>
                   </div>
                 )}
@@ -585,7 +585,7 @@ function App(){
 
                 {/* Evidence required warning */}
                 {!ina&&val!==null&&val<item.max&&!GN(item.id).trim()&&!(photos[item.id]||[]).length&&(
-                  <div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:"#fef2f2",border:"1px solid #fecaca",fontSize:12,color:"#991b1b",fontWeight:500}}>
+                  <div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:"#fef2f2",border:"1px solid #fecaca",fontSize:13,color:"#991b1b",fontWeight:500}}>
                     📸 Legg til bilde eller kommentar — hva er problemet?
                   </div>
                 )}
@@ -599,7 +599,7 @@ function App(){
               <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>📝 Oppsummering</div>
               <div style={{display:"flex",gap:6}}>
                 <textarea placeholder="Avtaler, oppfølging, observasjoner..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
-                  style={{flex:1,minHeight:80,border:"1px solid #eae7df",borderRadius:10,padding:"12px",fontSize:14,color:"#444",background:"#fafaf7"}}/>
+                  style={{flex:1,minHeight:80,border:"1px solid #eae7df",borderRadius:10,padding:"12px",fontSize:15,color:"#333",background:"#fafaf7"}}/>
                 <Voice onText={t=>setVisitNote(v=>(v?v+" ":"")+t)}/>
               </div>
             </div>
@@ -614,9 +614,9 @@ function App(){
             </div>
           )}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12}}>
-            <span style={{color:"#999"}}>Kategori {cScore}/{cMax}</span>
+            <span style={{color:"#888"}}>Kategori {cScore}/{cMax}</span>
             <span style={{fontWeight:800,color:D,fontSize:14}}>{tPct}%</span>
-            <span style={{color:"#999"}}>Totalt {tScore}/{aMax}</span>
+            <span style={{color:"#888"}}>Totalt {tScore}/{aMax}</span>
           </div>
 
           {/* HMS prompt — shown after step 4 if not yet asked */}
@@ -857,7 +857,7 @@ function App(){
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div>
               <div style={{fontSize:18,fontWeight:800,color:D}}>{sv.name}</div>
-              <div style={{fontSize:12,color:"#888"}}>{sv.address}, {sv.postnr} {sv.poststed} · {sv.type==="automat"?"Automat":"Fullservice"}</div>
+              <div style={{fontSize:12,color:"#777"}}>{sv.address}, {sv.postnr} {sv.poststed} · {sv.type==="automat"?"Automat":"Fullservice"}</div>
             </div>
             <button onClick={()=>{setStation(sv);setIncludeHms(null);setView("audit");}} style={{background:R,color:"#fff",padding:"10px 16px",borderRadius:10,fontSize:13,fontWeight:700}}>Nytt besøk</button>
           </div>
@@ -866,16 +866,16 @@ function App(){
           <div style={{display:"flex",gap:8,marginBottom:16}}>
             <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"14px",textAlign:"center"}}>
               <div style={{fontSize:28,fontWeight:800,color:lastSL?pCol(lastSL.pct):"#ccc"}}>{lastSL?lastSL.pct+"%":"—"}</div>
-              <div style={{fontSize:10,color:"#999",marginTop:2}}>Stasjonens vurdering</div>
+              <div style={{fontSize:10,color:"#888",marginTop:2}}>Stasjonens vurdering</div>
             </div>
             <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"14px",textAlign:"center"}}>
               <div style={{fontSize:28,fontWeight:800,color:lastRS?pCol(lastRS.pct):"#ccc"}}>{lastRS?lastRS.pct+"%":"—"}</div>
-              <div style={{fontSize:10,color:"#999",marginTop:2}}>Regionssjefens score</div>
+              <div style={{fontSize:10,color:"#888",marginTop:2}}>Regionssjefens score</div>
             </div>
             {lastRS&&lastSL&&(
               <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"14px",textAlign:"center"}}>
                 <div style={{fontSize:28,fontWeight:800,color:Math.abs(lastSL.pct-lastRS.pct)>15?"#dc2626":Math.abs(lastSL.pct-lastRS.pct)>5?"#d97706":"#16a34a"}}>{Math.abs(lastSL.pct-lastRS.pct)}pp</div>
-                <div style={{fontSize:10,color:"#999",marginTop:2}}>Gap</div>
+                <div style={{fontSize:10,color:"#888",marginTop:2}}>Gap</div>
               </div>
             )}
           </div>
@@ -888,7 +888,7 @@ function App(){
                 <span style={{fontSize:14,fontWeight:700,color:D}}>Coaching-briefing</span>
                 <span style={{fontSize:9,fontWeight:600,color:"#7c3aed",background:"#ede9fe",padding:"2px 6px",borderRadius:4}}>AI</span>
               </div>
-              <div style={{fontSize:11,color:"#888",marginBottom:10}}>
+              <div style={{fontSize:11,color:"#777",marginBottom:10}}>
                 {lastRS&&lastSL?"Basert på stasjonens selvevaluering og regionsjefens siste besøk":lastSL?"Basert på stasjonens selvevaluering ("+new Date(lastSL.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})+"). Regionssjef har ikke besøkt ennå.":"Ingen data tilgjengelig"}
               </div>
               {coaching.map((tip,i)=>(
@@ -918,14 +918,14 @@ function App(){
 
           {/* Visit history */}
           <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>Tidligere besøk</div>
-          {stVisits.length===0&&<div style={{color:"#999",fontSize:13}}>Ingen besøk registrert ennå</div>}
+          {stVisits.length===0&&<div style={{color:"#888",fontSize:13}}>Ingen besøk registrert ennå</div>}
           {stVisits.map(v=>(
             <div key={v.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontSize:12,fontWeight:600,color:D}}>
                   {v.visit_role==="rs"?"📋 Regionssjef":"🏪 Stasjonsleder"}
                 </div>
-                <div style={{fontSize:10,color:"#999"}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+                <div style={{fontSize:10,color:"#888"}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
               </div>
               <div style={{background:pCol(v.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:12,fontWeight:700}}>{v.pct}%</div>
             </div>
@@ -968,7 +968,7 @@ function App(){
             {[[rsV.length,"RS-besøk",R],[avgRS+"%","RS-snitt",pCol(avgRS)],[visited+"/"+stations.length,"Stasjoner",B],[avgSL?avgSL+"%":"—","SL-snitt","#0369a1"]].map(([v,l,c],i)=>(
               <div key={i} style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px 8px",textAlign:"center"}}>
                 <div style={{fontSize:20,fontWeight:800,color:c}}>{v}</div>
-                <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:.5,marginTop:2}}>{l}</div>
+                <div style={{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginTop:2}}>{l}</div>
               </div>
             ))}
           </div>
@@ -1044,7 +1044,7 @@ function App(){
             return(
               <div style={{marginBottom:20}}>
                 <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:4}}>Score per spørsmål (lavest først)</div>
-                <div style={{fontSize:11,color:"#999",marginBottom:10}}>Viser hvor vi har mest å gå på</div>
+                <div style={{fontSize:11,color:"#888",marginBottom:10}}>Viser hvor vi har mest å gå på</div>
                 {qScores.map(q=>{
                   const parts=q.t.split(" — ");
                   return(
@@ -1052,12 +1052,12 @@ function App(){
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                       <div style={{flex:1,minWidth:0}}>
                         <span style={{fontSize:12,fontWeight:700,color:D}}>{parts[0]}</span>
-                        <span style={{fontSize:10,color:"#999"}}> ({q.areaName})</span>
-                        {parts[1]&&<span style={{fontSize:11,color:"#888"}}> — {parts[1]}</span>}
+                        <span style={{fontSize:10,color:"#888"}}> ({q.areaName})</span>
+                        {parts[1]&&<span style={{fontSize:11,color:"#777"}}> — {parts[1]}</span>}
                       </div>
                       <div style={{flexShrink:0,textAlign:"right"}}>
                         <div style={{fontSize:13,fontWeight:800,color:pCol(q.pct)}}>{q.pct}%</div>
-                        <div style={{fontSize:9,color:"#999"}}>{q.avg}/{q.id<=20?5:q.max}</div>
+                        <div style={{fontSize:9,color:"#888"}}>{q.avg}/{q.id<=20?5:q.max}</div>
                       </div>
                     </div>
                     <div style={{height:4,background:"#f0ede5",borderRadius:2,marginTop:6,overflow:"hidden"}}>
@@ -1090,7 +1090,7 @@ function App(){
             <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
-                <div style={{fontSize:10,color:"#999"}}>{s.lastRS?new Date(s.lastRS.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"}):"Ikke besøkt"}</div>
+                <div style={{fontSize:10,color:"#888"}}>{s.lastRS?new Date(s.lastRS.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"}):"Ikke besøkt"}</div>
               </div>
               <div style={{display:"flex",gap:4}}>
                 {s.lastSL&&<div style={{background:"#dbeafe",color:"#1e40af",padding:"3px 7px",borderRadius:6,fontSize:10,fontWeight:700}}>SL {s.lastSL.pct}%</div>}
@@ -1099,7 +1099,7 @@ function App(){
             </button>
           ))}
 
-          {stScores.length===0&&<div style={{textAlign:"center",padding:40,color:"#999"}}>Ingen besøk registrert ennå</div>}
+          {stScores.length===0&&<div style={{textAlign:"center",padding:40,color:"#888"}}>Ingen besøk registrert ennå</div>}
         </div>
       </div>
     );
