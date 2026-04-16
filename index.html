@@ -38,7 +38,18 @@ const LC="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA4QAAASNCAYAAAAb5pB9AAAA
 const R="#CF122D",D="#0C2340",B="#0B326B";
 
 /* ── Components ── */
-function Mic({onText}){const[on,setOn]=useState(false);const r=useRef();const t=()=>{if(on){r.current?.stop();setOn(false);return;}const S=window.SpeechRecognition||window.webkitSpeechRecognition;if(!S){alert("Bruk mikrofon på tastaturet.");return;}const x=new S();x.lang="nb-NO";x.continuous=true;x.interimResults=false;x.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)onText(e.results[i][0].transcript);};x.onerror=()=>setOn(false);x.onend=()=>setOn(false);r.current=x;x.start();setOn(true);};return<button onClick={t} style={{width:44,height:44,borderRadius:10,background:on?R:"#f0ede5",color:on?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,animation:on?"rec 1s infinite":"none",flexShrink:0}}>{on?"⏹":"🎙️"}</button>;}
+const HAS_SPEECH=!!(window.SpeechRecognition||window.webkitSpeechRecognition);
+function Mic({onText}){
+  const[on,setOn]=useState(false);const r=useRef();
+  if(!HAS_SPEECH)return null;
+  const t=()=>{if(on){r.current?.stop();setOn(false);return;}
+    const S=window.SpeechRecognition||window.webkitSpeechRecognition;
+    const x=new S();x.lang="nb-NO";x.continuous=true;x.interimResults=false;
+    x.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)onText(e.results[i][0].transcript);};
+    x.onerror=()=>setOn(false);x.onend=()=>setOn(false);
+    r.current=x;x.start();setOn(true);};
+  return<button onClick={t} style={{width:44,height:44,borderRadius:10,background:on?R:"#f0ede5",color:on?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,animation:on?"rec 1s infinite":"none",flexShrink:0}}>{on?"⏹":"🎙️"}</button>;
+}
 
 function Cam({photos,onAdd,onRemove}){const ref=useRef();const h=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=v=>onAdd(v.target.result);r.readAsDataURL(f);e.target.value="";};return(<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{(photos||[]).map((p,i)=>(<div key={i} style={{position:"relative",width:56,height:56,borderRadius:8,overflow:"hidden",border:"2px solid #eae7df"}}><img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}}/><button onClick={()=>onRemove(i)} style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,.7)",color:"#fff",borderRadius:10,width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}<button onClick={()=>ref.current?.click()} style={{width:56,height:56,borderRadius:8,border:"2px dashed #ccc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#aaa",background:"#fafaf7"}}>📷</button><input ref={ref} type="file" accept="image/*" capture="environment" onChange={h}/></div>);}
 
@@ -224,6 +235,24 @@ function App(){
           <span style={{fontSize:11,fontWeight:700,color:"#fff",background:R,padding:"3px 10px",borderRadius:6}}>{isRS?"Regionssjef":role==="stasjonsleder"?"Stasjonsleder":"Leder"}</span>
           <span style={{fontSize:13,color:"#666"}}>{isRS?"Coaching-besøk":"Selvevaluering"}</span>
         </div>
+
+        {/* Quick stats + Dashboard link for RS/Leder */}
+        {(isRS||isLeder)&&(
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px",textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:800,color:D}}>{visits.length}</div>
+              <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:1}}>Besøk</div>
+            </div>
+            <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px",textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:800,color:D}}>{visits.length?Math.round(visits.reduce((s,v)=>s+v.pct,0)/visits.length):0}%</div>
+              <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:1}}>Snitt</div>
+            </div>
+            <button onClick={()=>setView("dash")} style={{flex:1,background:D,borderRadius:12,padding:"12px",textAlign:"center",color:"#fff"}}>
+              <div style={{fontSize:18}}>📊</div>
+              <div style={{fontSize:10,fontWeight:700,letterSpacing:1,marginTop:2}}>Dashboard</div>
+            </button>
+          </div>
+        )}
 
         {/* Journey visual */}
         <div style={{background:"#fff",borderRadius:14,border:"1px solid #eae7df",padding:16,marginBottom:16}}>
@@ -458,6 +487,75 @@ function App(){
         )}
         <div className="fadeUp" style={{color:"#4ade80",fontSize:12,marginTop:14,fontWeight:600,animationDelay:"350ms"}}>✓ Lagret i database</div>
         <button className="fadeUp" onClick={()=>setView("home")} style={{marginTop:40,padding:"15px 32px",background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15,animationDelay:"400ms"}}>Tilbake til stasjoner</button>
+      </div>
+    );
+  }
+
+  /* ── DASHBOARD ── */
+  if(view==="dash"){
+    const rsV=visits.filter(v=>v.visit_role==="rs");
+    const slV=visits.filter(v=>v.visit_role==="sl");
+    const stScores=stations.map(s=>{
+      const lastRS=rsV.find(v=>v.station_id===s.id);
+      const lastSL=slV.find(v=>v.station_id===s.id);
+      const gap=lastRS&&lastSL?lastSL.pct-lastRS.pct:null;
+      return{...s,lastRS,lastSL,gap};
+    }).filter(s=>s.lastRS||s.lastSL).sort((a,b)=>(a.lastRS?.pct??a.lastSL?.pct??100)-(b.lastRS?.pct??b.lastSL?.pct??100));
+    const avgRS=rsV.length?Math.round(rsV.reduce((s,v)=>s+v.pct,0)/rsV.length):0;
+    const avgSL=slV.length?Math.round(slV.reduce((s,v)=>s+v.pct,0)/slV.length):0;
+    const visited=new Set(visits.map(v=>v.station_id)).size;
+
+    return(
+      <div style={{paddingBottom:40}}>
+        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <button onClick={()=>setView("home")} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>← Tilbake</button>
+          <span style={{color:"#fff",fontSize:14,fontWeight:700}}>Dashboard</span>
+          <span style={{width:60}}/>
+        </div>
+
+        <div style={{padding:"16px 20px"}}>
+          {/* KPI row */}
+          <div style={{display:"flex",gap:8,marginBottom:20}}>
+            {[[rsV.length,"RS-besøk",R],[avgRS+"%","RS-snitt",pCol(avgRS)],[visited+"/"+stations.length,"Stasjoner",B],[avgSL?avgSL+"%":"—","SL-snitt","#0369a1"]].map(([v,l,c],i)=>(
+              <div key={i} style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px 8px",textAlign:"center"}}>
+                <div style={{fontSize:20,fontWeight:800,color:c}}>{v}</div>
+                <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:.5,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Gap analysis */}
+          {stScores.filter(s=>s.gap!==null).length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:10}}>Gap-analyse (SL − RS)</div>
+              {stScores.filter(s=>s.gap!==null).sort((a,b)=>Math.abs(b.gap)-Math.abs(a.gap)).slice(0,10).map(s=>(
+                <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #f5f3ee"}}>
+                  <div style={{flex:1,fontSize:13,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                  <div style={{fontSize:11,color:"#0369a1",fontWeight:600}}>SL {s.lastSL.pct}%</div>
+                  <div style={{fontSize:11,color:R,fontWeight:600}}>RS {s.lastRS.pct}%</div>
+                  <div style={{padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700,background:Math.abs(s.gap)>15?"#fef2f2":Math.abs(s.gap)>5?"#fffbeb":"#f0fdf4",color:Math.abs(s.gap)>15?"#991b1b":Math.abs(s.gap)>5?"#92400e":"#166534"}}>{s.gap>0?"+":""}{s.gap}pp</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Stations ranked */}
+          <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:10}}>Stasjoner etter score</div>
+          {stScores.map(s=>(
+            <div key={s.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                <div style={{fontSize:10,color:"#999"}}>{s.lastRS?new Date(s.lastRS.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"}):"Ikke besøkt"}</div>
+              </div>
+              <div style={{display:"flex",gap:4}}>
+                {s.lastSL&&<div style={{background:"#dbeafe",color:"#1e40af",padding:"3px 7px",borderRadius:6,fontSize:10,fontWeight:700}}>SL {s.lastSL.pct}%</div>}
+                {s.lastRS&&<div style={{background:pCol(s.lastRS.pct),color:"#fff",padding:"3px 7px",borderRadius:6,fontSize:10,fontWeight:700}}>RS {s.lastRS.pct}%</div>}
+              </div>
+            </div>
+          ))}
+
+          {stScores.length===0&&<div style={{textAlign:"center",padding:40,color:"#999"}}>Ingen besøk registrert ennå</div>}
+        </div>
       </div>
     );
   }
