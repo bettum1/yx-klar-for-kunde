@@ -519,7 +519,7 @@ function App(){
                 {/* Item number + text */}
                 <div style={{display:"flex",gap:10,marginBottom:10}}>
                   <div style={{width:28,height:28,borderRadius:8,background:val!=null?lFor(item.max,val).c+"18":D+"08",color:val!=null?lFor(item.max,val).c:D,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{item.id}</div>
-                  <div style={{fontSize:14,fontWeight:600,color:D,lineHeight:1.4}}>{item.t}</div>
+                  <div style={{fontSize:14,color:D,lineHeight:1.4}}>{item.t.includes(" — ")?<><span style={{fontWeight:800}}>{item.t.split(" — ")[0]}</span><span style={{fontWeight:400,color:"#555"}}> — {item.t.split(" — ").slice(1).join(" — ")}</span></>:<span style={{fontWeight:600}}>{item.t}</span>}</div>
                 </div>
 
                 {/* Self-eval badge for RS */}
@@ -696,7 +696,7 @@ function App(){
               {unresolved.map(item=>(
                 <div key={item.id} style={{background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:13,fontWeight:600,color:D,flex:1}}>{item.t}</div>
+                    <div style={{fontSize:13,color:D,flex:1}}>{item.t.includes(" — ")?<><span style={{fontWeight:700}}>{item.t.split(" — ")[0]}</span><span style={{fontWeight:400,color:"#555"}}> — {item.t.split(" — ").slice(1).join(" — ")}</span></>:<span style={{fontWeight:600}}>{item.t}</span>}</div>
                     <div style={{background:item.score===0?"#dc2626":"#d97706",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700,flexShrink:0,marginLeft:8}}>{item.score===0?"Ikke godkjent":"Delvis"}</div>
                   </div>
                   {item.note&&<div style={{fontSize:11,color:"#666",marginTop:4,fontStyle:"italic"}}>"{item.note}"</div>}
