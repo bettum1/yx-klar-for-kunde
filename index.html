@@ -766,12 +766,15 @@ function App(){
           </div>
 
           {/* AI COACHING */}
-          {coaching&&isRS&&(
+          {coaching&&(isRS||isLeder)&&(
             <div style={{background:`linear-gradient(135deg, ${D}06, #7c3aed08)`,border:"1px solid #c4b5fd",borderRadius:14,padding:"16px",marginBottom:16}}>
-              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                 <span style={{fontSize:16}}>🤖</span>
                 <span style={{fontSize:14,fontWeight:700,color:D}}>Coaching-briefing</span>
                 <span style={{fontSize:9,fontWeight:600,color:"#7c3aed",background:"#ede9fe",padding:"2px 6px",borderRadius:4}}>AI</span>
+              </div>
+              <div style={{fontSize:11,color:"#888",marginBottom:10}}>
+                {lastRS&&lastSL?"Basert på stasjonens selvevaluering og regionsjefens siste besøk":lastSL?"Basert på stasjonens selvevaluering ("+new Date(lastSL.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})+"). Regionssjef har ikke besøkt ennå.":"Ingen data tilgjengelig"}
               </div>
               {coaching.map((tip,i)=>(
                 <div key={i} style={{display:"flex",gap:8,padding:"8px 0",borderTop:i?"1px solid #e9e5f5":"none"}}>
