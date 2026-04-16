@@ -93,8 +93,7 @@ const JOURNEY=[
    desc:"Overgangen fra ute til inne. Siktlinje, renhold og produkttilgjengelighet.",
    items:[
     {id:22,t:"Inngangsparti, gangveier og ramper rene og frie",q:"Ansvar for inngangssonen?",max:2},
-    {id:23,t:"Fasade, vinduer og dører rene, uten graffiti",q:"Sist vurdert?",max:2},
-    {id:24,t:"Dører og vinduer fungerer, uten skade",q:"Melding av skader?",max:1},
+    {id:23,t:"Fasade, dører og vinduer rene, hele og fungerer. Uten graffiti",q:"Sist vurdert? Rutine for skademelding?",max:2},
     {id:25,t:"Gulv, vegger og tak rene. Gulvmatter rene",q:"Rutine for gulvrunde?",max:1},
     {id:26,t:"Alt lys i butikken fungerer og er tent",q:"Melding av defekter?",max:1},
     {id:27,t:"Kjøleskap og frysere slått på og fungerer",q:"Daglig temperaturkontroll?",max:2},
@@ -103,14 +102,13 @@ const JOURNEY=[
     {id:30,t:"Priser klart angitt med godkjente skilt",q:"Sjekk priser mot kasse?",max:1},
     {id:31,t:"Kampanjemateriell iht. plan. Uhindret siktlinje inn",q:"Kampanjer — sist oppdatert?",max:2},
     {id:32,t:"Kjernekategorier representert, 5 mestselgende på lager",q:"OU-lista — aktiv bruk?",max:5},
-    {id:33,t:"Smøremidler iht. planogram, ikke utsolgt",q:"Smøremiddelsortiment ok?",max:5},
+    {id:33,t:"Smøremidler iht. planogram, ikke utsolgt",q:"Smøremiddelsortiment ok?",max:2},
     {id:35,t:"Ingen utløpte produkter. Eldste dato fremst",q:"Datosjekk — hvem?",max:2},
     {id:36,t:"Varmmat/drikke fungerer, rent. Matvaresikkerhet følges",q:"Opplæring matvaresikkerhet?",max:2},
     {id:37,t:"Daglig rengjøring registrert. Temperaturer med tidspunkt",q:"Renholdslogg synlig?",max:2},
     {id:38,t:"Rømningsveier frie og tydelig merket",q:"Daglig sjekk?",max:2},
     {id:39,t:"Disk ren, ryddig, ikke overfylt",q:"Kassesonen — sist ryddet?",max:1},
-    {id:40,t:"Kort/lojalitet-skjemaer ved disk. Alle betalingsformer",q:"YX-appen — introduseres?",max:2},
-    {id:41,t:"Ansatte godtar alle anviste betalingsmetoder",q:"Friksjon med betaling?",max:2},
+    {id:40,t:"Kort/lojalitet-info ved disk. Alle betalingsformer akseptert av ansatte",q:"YX-appen — introduseres aktivt?",max:2},
   ]},
   {id:"motet",name:"Møtet med oss",icon:"👥",step:4,img:"img/journey-5-butikkvegg.jpg",
    desc:"Det siste inntrykket. Her bygges lojalitet — eller mistes.",
@@ -146,6 +144,7 @@ function App(){
   const[loginErr,setLoginErr]=useState("");
   const[loginLoad,setLoginLoad]=useState(false);
   const[showRef,setShowRef]=useState(false);
+  const[showAll,setShowAll]=useState(false);
 
   useEffect(()=>{
     sb.auth.getSession().then(({data:{session}})=>{if(session){setUser(session.user);loadProf(session.user.id);}else setLoading(false);});
@@ -276,26 +275,28 @@ function App(){
         </div>
 
         {/* Station count */}
-        <div style={{fontSize:12,color:"#999",marginBottom:8}}>{filt.length} stasjoner{search?` for «${search}»`:""}</div>
+        <div style={{fontSize:12,color:"#999",marginBottom:8}}>{filt.length} stasjoner{search?` for «${search}»`:""}{loc?" · sortert etter avstand":""}</div>
       </div>
 
       {/* Station list */}
       {stLoad?<div style={{textAlign:"center",padding:40}}><div className="loader" style={{margin:"0 auto",borderColor:"#eee",borderTopColor:R}}/></div>:(
         <div style={{padding:"0 20px",display:"flex",flexDirection:"column",gap:6}}>
-          {filt.slice(0,50).map(s=>{
+          {filt.slice(0,showAll?filt.length:5).map(s=>{
             const lv=visits.find(v=>v.station_id===s.id);
             const se=getSE(s.id);
             const d=loc&&s.lat?dist(s):null;
+            const distTxt=d!==null&&d<500?(d<1?Math.round(d*1000)+" m":d.toFixed(1)+" km"):null;
             return(
-              <button key={s.id} onClick={()=>{setStation(s);setView("audit");}} className="fadeUp" style={{background:"#fff",border:"1px solid #eae7df",borderRadius:14,padding:"14px 16px",textAlign:"left",transition:"box-shadow .15s",animationDelay:`${Math.min(filt.indexOf(s)*30,300)}ms`}}>
+              <button key={s.id} onClick={()=>{setStation(s);setShowAll(false);setView("audit");}} className="fadeUp" style={{background:"#fff",border:"1px solid #eae7df",borderRadius:14,padding:"14px 16px",textAlign:"left",transition:"box-shadow .15s"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
                       <span style={{fontWeight:700,fontSize:14,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
-                      <span style={{fontSize:9,fontWeight:600,color:s.type==="automat"?"#d97706":"#059669",background:s.type==="automat"?"#fef3c7":"#d1fae5",padding:"1px 5px",borderRadius:3,flexShrink:0}}>{s.type==="automat"?"A":"F"}</span>
+                      {distTxt&&<span style={{fontSize:11,fontWeight:600,color:B,flexShrink:0}}>({distTxt})</span>}
                     </div>
-                    <div style={{fontSize:11,color:"#999",marginTop:3}}>
-                      {s.poststed}{d!==null&&d<300?<span style={{color:B,fontWeight:600}}> · {d<1?Math.round(d*1000)+"m":d.toFixed(1)+"km"}</span>:""}
+                    <div style={{fontSize:11,color:"#999",marginTop:3,display:"flex",alignItems:"center",gap:4}}>
+                      <span>{s.poststed}</span>
+                      <span style={{fontSize:9,fontWeight:600,color:s.type==="automat"?"#d97706":"#059669",background:s.type==="automat"?"#fef3c7":"#d1fae5",padding:"1px 5px",borderRadius:3}}>{s.type==="automat"?"Automat":"Fullservice"}</span>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:4,flexShrink:0,marginLeft:10}}>
@@ -306,7 +307,16 @@ function App(){
               </button>
             );
           })}
-          {filt.length>50&&<div style={{fontSize:12,color:"#999",textAlign:"center",padding:12}}>Viser 50 av {filt.length} — bruk søk</div>}
+          {!showAll&&filt.length>5&&(
+            <button onClick={()=>setShowAll(true)} style={{padding:"14px",background:"#fff",border:"2px solid #eae7df",borderRadius:14,fontWeight:700,fontSize:14,color:D,textAlign:"center"}}>
+              Se alle {filt.length} stasjoner ↓
+            </button>
+          )}
+          {showAll&&filt.length>5&&(
+            <button onClick={()=>setShowAll(false)} style={{padding:"10px",fontSize:12,color:"#999",textAlign:"center"}}>
+              Vis færre ↑
+            </button>
+          )}
         </div>
       )}
 
@@ -333,6 +343,17 @@ function App(){
     const cScore=ci.reduce((s,i)=>s+(G(i.id)||0),0);
     const isLast=catIdx===JOURNEY.length-1;
     const se=isRS?getSE(station.id):null;
+
+    // FIX: items that need evidence (scored non-max, not N/A, no photo and no comment)
+    const needsEvidence=cat.items.filter(i=>{
+      if(isNA(i.id))return false;
+      const v=G(i.id);
+      if(v===null||v>=i.max)return false; // not scored or godkjent
+      const hasNote=GN(i.id).trim().length>0;
+      const hasPhoto=(photos[i.id]||[]).length>0;
+      return!hasNote&&!hasPhoto;
+    });
+    const canAdvance=needsEvidence.length===0;
 
     return(
       <div style={{paddingBottom:130}}>
@@ -435,6 +456,13 @@ function App(){
                   </div>
                 )}
                 {!ina&&<Cam photos={photos[item.id]||[]} onAdd={d=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),d]}))} onRemove={idx=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}/>}
+
+                {/* Evidence required warning */}
+                {!ina&&val!==null&&val<item.max&&!GN(item.id).trim()&&!(photos[item.id]||[]).length&&(
+                  <div style={{marginTop:8,padding:"8px 12px",borderRadius:8,background:"#fef2f2",border:"1px solid #fecaca",fontSize:12,color:"#991b1b",fontWeight:500}}>
+                    📸 Legg til bilde eller kommentar — hva er problemet?
+                  </div>
+                )}
               </div>
             );
           })}
@@ -454,6 +482,11 @@ function App(){
 
         {/* Bottom bar */}
         <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",padding:"10px 16px 14px",maxWidth:560,margin:"0 auto"}}>
+          {needsEvidence.length>0&&(
+            <div style={{fontSize:11,color:"#991b1b",textAlign:"center",marginBottom:6,fontWeight:500}}>
+              ⚠️ {needsEvidence.length} punkt{needsEvidence.length>1?"er":""} trenger bilde eller kommentar
+            </div>
+          )}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12}}>
             <span style={{color:"#999"}}>Kategori {cScore}/{cMax}</span>
             <span style={{fontWeight:800,color:D,fontSize:14}}>{tPct}%</span>
@@ -461,8 +494,8 @@ function App(){
           </div>
           <div style={{display:"flex",gap:8}}>
             {catIdx>0&&<button onClick={()=>{setCatIdx(i=>i-1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:15}}>←</button>}
-            {!isLast?<button onClick={()=>{setCatIdx(i=>i+1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:2,padding:"15px",background:D,color:"#fff",borderRadius:12,fontWeight:700,fontSize:15}}>Neste steg →</button>
-            :<button onClick={submit} disabled={saving} style={{flex:2,padding:"15px",background:R,color:"#fff",borderRadius:12,fontWeight:800,fontSize:15,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør besøk ✓"}</button>}
+            {!isLast?<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}setCatIdx(i=>i+1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:2,padding:"15px",background:canAdvance?D:"#ccc",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15}}>Neste steg →</button>
+            :<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}submit();}} disabled={saving} style={{flex:2,padding:"15px",background:canAdvance?R:"#ccc",color:"#fff",borderRadius:12,fontWeight:800,fontSize:15,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør besøk ✓"}</button>}
           </div>
         </div>
       </div>
