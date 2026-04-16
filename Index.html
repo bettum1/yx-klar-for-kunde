@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#e03c31">
+<title>YX — Klar for Kunde</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overscroll-behavior: none; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f5f3ee;
+    color: #141414;
+    font-size: 15px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+  #root { min-height: 100vh; max-width: 480px; margin: 0 auto; background: #fafaf7; }
+  button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+  input, textarea { font-family: inherit; font-size: 16px; border: none; outline: none; background: transparent; color: inherit; }
+  textarea { resize: none; }
+  .sr { position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
+
+const RFC = [
+  { id:"arrive", name:"Ankomst", icon:"🚗", phase:"Få kunden inn",
+    intro:"Ville du selv stoppet her? Førsteinntrykket avgjør.",
+    items:[
+      {id:1, text:"Prisskilt/pylon synlig og korrekt fra veien", talk:"Hvor ofte sjekker dere at prisskiltet stemmer?", max:2},
+      {id:2, text:"Innkjøring oversiktlig og uten hindringer", talk:"Har kunder meldt at det er vanskelig å finne inn?", max:2},
+      {id:3, text:"Fasade, tak og kledning rent uten skader", talk:"Når ble fasaden sist vurdert?", max:2},
+      {id:4, text:"Belysning fungerer — dag og natt", talk:"Har dere rutine for å sjekke belysning?", max:1},
+      {id:5, text:"Uteområde ryddig — søppel, ugress, parkering", talk:"Hvem har ansvar for uterunden i løpet av dagen?", max:2},
+    ]},
+  { id:"pump", name:"Pumpeområde", icon:"⛽", phase:"Få kunden inn",
+    intro:"Kunden står her 3–5 minutter. Alt de ser teller.",
+    items:[
+      {id:6, text:"Pumper rene, uten skader og lekkasjer", talk:"Hvem rengjør pumpene, og hvor ofte?", max:2},
+      {id:7, text:"Alle skjermer og betalingsterminaler fungerer", talk:"Hva gjør dere hvis en terminal feiler?", max:2},
+      {id:8, text:"Spyleanlegg, tørkepapir og hansker tilgjengelig", talk:"Hvor ofte fylles forbruksmateriell på?", max:2},
+      {id:9, text:"Avfallsdunker ikke overfylt, søppel plukket", talk:"Har dere en fast rutine for dunktømming?", max:1},
+      {id:10, text:"Pris- og kampanjeplakater korrekt og oppdatert", talk:"Hvem sjekker at kampanjer er på plass?", max:2},
+    ]},
+  { id:"entry", name:"Inngangen", icon:"🚪", phase:"Inn i butikken",
+    intro:"Overgangen fra ute til inne — en tydelig invitasjon.",
+    items:[
+      {id:11, text:"Dør ren, åpner lett, ingen klistremerker/grafitti", talk:"Når ble døren sist ordentlig rengjort?", max:1},
+      {id:12, text:"Vinduer rene og uten unødvendige plakater", talk:"Hvordan velger dere hva som skal i vinduet?", max:1},
+      {id:13, text:"Matter rene og tørre — ikke snublefelle", talk:"Har dere nok matter for dårlig vær?", max:1},
+      {id:14, text:"Inngangssone invitert og åpen — ikke trang", talk:"Hvordan opplever dere selv å komme inn?", max:2},
+    ]},
+  { id:"store", name:"Butikkopplevelsen", icon:"🛒", phase:"Inn i butikken",
+    intro:"Kunden skal finne det de leter etter — og oppdage noe nytt.",
+    items:[
+      {id:15, text:"Hyller fulle og fronted — ingen hull", talk:"Hvordan sikrer dere at hyller alltid er fulle?", max:2},
+      {id:16, text:"Planogram fulgt — produkter på rett plass", talk:"Hvem har ansvar for planogramsjekk?", max:2},
+      {id:17, text:"Prislapper korrekte og lesbare på alle produkter", talk:"Hvor ofte sjekker dere priser mot kasse?", max:2},
+      {id:18, text:"Kampanjemateriell på plass iht. kampanjeplan", talk:"Hvordan bestilles og rigges kampanjer?", max:2},
+      {id:19, text:"Kjølere og frysere ryddige, rene, riktig temperatur", talk:"Daglig temperaturkontroll — hvem?", max:2},
+      {id:20, text:"Gulv rent, ingen søppel eller søl", talk:"Hvor ofte går gulvrunden?", max:1},
+    ]},
+  { id:"food", name:"Mat & drikke", icon:"☕", phase:"Inn i butikken",
+    intro:"Marginen ligger her. Kvalitet er ikke forhandlingsbart.",
+    items:[
+      {id:21, text:"Kaffe fersk, maskiner rene og fungerer", talk:"Hvor ofte lages ny kaffe? Hvordan måler dere?", max:2},
+      {id:22, text:"Varmdisk — produkter friske, riktig temp, merket", talk:"Hva gjør dere med usolgt varmmat?", max:2},
+      {id:23, text:"Ferske produkter (pølse, mat) ser appetittlig ut", talk:"Hvordan trener dere på rigging?", max:2},
+      {id:24, text:"Datomerking sjekket, ingen utgåtte varer", talk:"Hvem har ansvar for datosjekk?", max:2},
+      {id:25, text:"Renhold på matområde upåklagelig", talk:"Hvordan dokumenteres renhold?", max:2},
+    ]},
+  { id:"pay", name:"Kassen", icon:"💳", phase:"Inn i butikken",
+    intro:"Siste møtet. Kundens siste inntrykk.",
+    items:[
+      {id:26, text:"Kassesone ryddig, ingen rot", talk:"Når ble kassesonen sist ryddet ordentlig?", max:1},
+      {id:27, text:"Ansatte hilser, smiler, tar øyekontakt", talk:"Hvordan trener dere på kundeservice?", max:2},
+      {id:28, text:"Mersalg og YX-app nevnes naturlig", talk:"Hvilke mersalgsfraser funker best hos dere?", max:2},
+      {id:29, text:"Ansatte i korrekt uniform, ryddig", talk:"Hvordan følger dere opp uniformskrav?", max:1},
+      {id:30, text:"Kø håndteres — ingen står urimelig lenge", talk:"Hva utløser at dere åpner ekstra kasse?", max:1},
+    ]},
+  { id:"toilet", name:"Toalett", icon:"🚻", phase:"Grunn til å komme igjen",
+    intro:"Et rent toalett = tillit til hele stasjonen.",
+    items:[
+      {id:31, text:"Toalett rent, luktfritt, nylig vasket", talk:"Hvor ofte sjekkes toalettet?", max:2},
+      {id:32, text:"Såpe, papir og håndtørker på plass", talk:"Hvem fyller på forbruksmateriell?", max:1},
+      {id:33, text:"Ingen hærverk, skader eller defekter", talk:"Hva gjør dere ved hærverk?", max:1},
+      {id:34, text:"Sjekkliste for toalett-renhold signert og oppdatert", talk:"Vises sjekklisten kundene?", max:1},
+    ]},
+  { id:"hms", name:"HMS & sikkerhet", icon:"⚠️", phase:"Drift",
+    intro:"Ikke-forhandlingsbart. Liv og eierskap står på spill.",
+    items:[
+      {id:35, text:"Brannslukkere synlige, kontrollert og tilgjengelige", talk:"Når er siste kontroll?", max:2},
+      {id:36, text:"Rømningsveier frie, skilter lyser", talk:"Sjekkes rømningsveier daglig?", max:2},
+      {id:37, text:"Førstehjelpsutstyr komplett og tilgjengelig", talk:"Hvem har ansvar for påfyll?", max:1},
+      {id:38, text:"Øyedusj/nøddusj fungerer, merket", talk:"Testes nøddusj månedlig?", max:1},
+      {id:39, text:"HMS-plan synlig, oppdatert, ansatte kjenner den", talk:"Når hadde dere sist HMS-gjennomgang?", max:2},
+    ]},
+  { id:"team", name:"Team & kompetanse", icon:"👥", phase:"Drift",
+    intro:"Stasjonens kultur bygges her. Ikke i sjekkpunkter.",
+    items:[
+      {id:40, text:"Opplæring dokumentert for alle ansatte", talk:"Hvordan lærer dere opp nye?", max:2},
+      {id:41, text:"Vaktplaner henger tilgjengelig, korrekte", talk:"Hvem setter opp vaktplanen?", max:1},
+      {id:42, text:"Ansatte kan forklare månedens kampanjer", talk:"Hvordan kommuniseres kampanjer internt?", max:2},
+      {id:43, text:"Eier/daglig leder synlig på stasjonen", talk:"Hvor mye tid tilbringer eier på stasjonen?", max:2},
+      {id:44, text:"Stasjonen har en tydelig målsetting for måneden", talk:"Hva er målet deres denne måneden?", max:2},
+    ]},
+];
+
+const MAX_TOTAL = RFC.reduce((s,c) => s + c.items.reduce((a,b) => a+b.max, 0), 0);
+
+const STATIONS = [
+  { id:"s001", name:"YX Tønsberg", type:"Fullservice" },
+  { id:"s002", name:"YX Horten", type:"Fullservice" },
+  { id:"s003", name:"YX Sandefjord", type:"Fullservice" },
+  { id:"s004", name:"YX Larvik", type:"Fullservice" },
+  { id:"s005", name:"YX Brokelandsheia", type:"Fullservice" },
+  { id:"s006", name:"YX Sande", type:"Automat" },
+  { id:"s007", name:"YX Øvre Årdal", type:"Fullservice" },
+  { id:"s008", name:"YX Drammen", type:"Fullservice" },
+];
+
+const KEY = "yx_kfk_v1";
+const loadVisits = () => {
+  try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch { return []; }
+};
+const saveVisits = (v) => localStorage.setItem(KEY, JSON.stringify(v));
+
+const YX_RED = "#e03c31";
+const INK = "#141414";
+
+const scoreColor = (pct) => pct >= 85 ? "#16a34a" : pct >= 70 ? "#84cc16" : pct >= 55 ? "#eab308" : pct >= 40 ? "#f97316" : "#dc2626";
+const scoreLabel = (pct) => pct >= 85 ? "Utmerket" : pct >= 70 ? "Godt" : pct >= 55 ? "OK" : pct >= 40 ? "Trenger oppfølging" : "Kritisk";
+
+function App() {
+  const [view, setView] = useState("splash");
+  const [role, setRole] = useState(null);
+  const [station, setStation] = useState(null);
+  const [catIdx, setCatIdx] = useState(0);
+  const [scores, setScores] = useState({});
+  const [notes, setNotes] = useState({});
+  const [visits, setVisits] = useState(loadVisits());
+
+  useEffect(() => {
+    const t = setTimeout(() => view === "splash" && setView("roles"), 1400);
+    return () => clearTimeout(t);
+  }, []);
+
+  const totalScore = Object.values(scores).reduce((s,v) => s + (v||0), 0);
+  const totalPct = Math.round(totalScore / MAX_TOTAL * 100);
+
+  const submit = () => {
+    const visit = {
+      id: Date.now(),
+      stationId: station.id,
+      stationName: station.name,
+      role,
+      date: new Date().toISOString(),
+      scores: { ...scores },
+      notes: { ...notes },
+      total: totalScore,
+      max: MAX_TOTAL,
+      pct: totalPct,
+    };
+    const updated = [visit, ...visits];
+    setVisits(updated);
+    saveVisits(updated);
+    setScores({}); setNotes({}); setCatIdx(0);
+    setView("done");
+  };
+
+  if (view === "splash") return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:INK}}>
+      <div style={{fontSize:72,fontWeight:900,color:YX_RED,letterSpacing:-5,lineHeight:1}}>YX</div>
+      <div style={{color:"#666",fontSize:12,marginTop:12,letterSpacing:3,textTransform:"uppercase"}}>Klar for Kunde</div>
+    </div>
+  );
+
+  if (view === "roles") return (
+    <div style={{padding:"60px 24px",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+      <div style={{fontSize:52,fontWeight:900,color:YX_RED,letterSpacing:-3,lineHeight:1}}>YX</div>
+      <h1 style={{fontSize:24,fontWeight:800,margin:"6px 0 4px"}}>Klar for Kunde</h1>
+      <p style={{fontSize:14,color:"#777",marginBottom:40}}>Stasjonsbesøk & RFC-inspeksjon</p>
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {[
+          { k:"sl", e:"🏪", n:"Stasjonsleder", d:"Selvevaluering" },
+          { k:"rs", e:"📋", n:"Regionssjef", d:"Coaching-besøk" },
+          { k:"leder", e:"📊", n:"Lederdashboard", d:"Oversikt og historikk" },
+        ].map(r => (
+          <button key={r.k}
+            onClick={() => { setRole(r.k); setView(r.k === "leder" ? "dash" : "home"); }}
+            style={{background:"#fff",border:"2px solid #eae7df",borderRadius:16,padding:"22px 20px",textAlign:"left",display:"flex",alignItems:"center",gap:16}}>
+            <span style={{fontSize:32}}>{r.e}</span>
+            <div>
+              <div style={{fontWeight:700,fontSize:17}}>{r.n}</div>
+              <div style={{fontSize:13,color:"#888",marginTop:2}}>{r.d}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+      <div style={{marginTop:"auto",paddingTop:40,fontSize:11,color:"#bbb",textAlign:"center"}}>
+        YX Norge AS · MVP v1
+      </div>
+    </div>
+  );
+
+  if (view === "home") return (
+    <div style={{padding:"20px 20px 40px"}}>
+      <TopBar onBack={() => setView("roles")} title={role === "rs" ? "Regionssjef" : "Stasjonsleder"} />
+      <h2 style={{fontSize:20,fontWeight:800,margin:"20px 0 12px"}}>Velg stasjon</h2>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {STATIONS.map(s => {
+          const last = visits.find(v => v.stationId === s.id);
+          return (
+            <button key={s.id} onClick={() => { setStation(s); setView("audit"); }}
+              style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"16px",display:"flex",alignItems:"center",justifyContent:"space-between",textAlign:"left"}}>
+              <div>
+                <div style={{fontWeight:600,fontSize:15}}>{s.name}</div>
+                <div style={{fontSize:12,color:"#999",marginTop:2}}>
+                  {last ? `Sist besøkt: ${new Date(last.date).toLocaleDateString("nb-NO")}` : "Aldri besøkt"}
+                </div>
+              </div>
+              {last && (
+                <div style={{background:scoreColor(last.pct),color:"#fff",padding:"4px 10px",borderRadius:8,fontSize:13,fontWeight:700}}>
+                  {last.pct}%
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  if (view === "audit" && station) {
+    const cat = RFC[catIdx];
+    const catMax = cat.items.reduce((s,i) => s + i.max, 0);
+    const catScore = cat.items.reduce((s,i) => s + (scores[i.id]||0), 0);
+    return (
+      <div style={{paddingBottom:100}}>
+        <div style={{background:INK,color:"#fff",padding:"14px 18px",position:"sticky",top:0,zIndex:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <button onClick={() => setView("home")} style={{color:"#aaa",fontSize:13}}>← Avbryt</button>
+            <div style={{fontSize:11,color:"#888"}}>{catIdx+1}/{RFC.length}</div>
+          </div>
+          <div style={{fontSize:11,color:"#aaa",letterSpacing:1,textTransform:"uppercase"}}>{cat.phase}</div>
+          <div style={{fontSize:19,fontWeight:800,marginTop:2}}>{cat.icon} {cat.name}</div>
+          <div style={{fontSize:12,color:"#999",marginTop:4}}>{cat.intro}</div>
+          <div style={{height:4,background:"#333",borderRadius:2,marginTop:10,overflow:"hidden"}}>
+            <div style={{height:"100%",background:YX_RED,width:`${(catIdx+1)/RFC.length*100}%`,transition:"width .3s"}}/>
+          </div>
+        </div>
+
+        <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:10}}>
+          {cat.items.map(item => {
+            const val = scores[item.id] ?? null;
+            return (
+              <div key={item.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px"}}>
+                <div style={{fontSize:14,fontWeight:600,marginBottom:10}}>{item.text}</div>
+                <div style={{display:"flex",gap:6,marginBottom:8}}>
+                  {[...Array(item.max+1)].map((_,n) => (
+                    <button key={n} onClick={() => setScores(s => ({...s, [item.id]: n}))}
+                      style={{flex:1,padding:"10px 0",borderRadius:8,background: val===n ? INK : "#f5f3ee",color: val===n ? "#fff" : "#666",fontSize:14,fontWeight:700}}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                {role === "rs" && (
+                  <div style={{background:"#fef7f0",borderLeft:`3px solid ${YX_RED}`,padding:"8px 10px",borderRadius:4,fontSize:12,color:"#555",marginTop:4}}>
+                    💬 {item.talk}
+                  </div>
+                )}
+                <textarea
+                  placeholder="Notat (valgfritt)"
+                  value={notes[item.id]||""}
+                  onChange={e => setNotes(n => ({...n, [item.id]: e.target.value}))}
+                  style={{width:"100%",minHeight:36,border:"none",borderTop:"1px solid #f0ede5",paddingTop:8,marginTop:8,fontSize:13,color:"#444"}}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",padding:"12px 16px",maxWidth:480,margin:"0 auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12,color:"#666"}}>
+            <span>Kategori: {catScore}/{catMax}</span>
+            <span>Total: {totalScore}/{MAX_TOTAL} ({totalPct}%)</span>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            {catIdx > 0 && (
+              <button onClick={() => setCatIdx(i => i-1)}
+                style={{flex:1,padding:"14px",background:"#f5f3ee",borderRadius:10,fontWeight:600,color:"#444"}}>
+                ← Forrige
+              </button>
+            )}
+            {catIdx < RFC.length-1 ? (
+              <button onClick={() => setCatIdx(i => i+1)}
+                style={{flex:2,padding:"14px",background:INK,color:"#fff",borderRadius:10,fontWeight:700}}>
+                Neste →
+              </button>
+            ) : (
+              <button onClick={submit}
+                style={{flex:2,padding:"14px",background:YX_RED,color:"#fff",borderRadius:10,fontWeight:800}}>
+                Fullfør besøk ✓
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === "done") {
+    const v = visits[0];
+    return (
+      <div style={{padding:"80px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
+        <div style={{width:80,height:80,borderRadius:40,background:scoreColor(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,marginBottom:20}}>✓</div>
+        <div style={{fontSize:13,color:"#888",letterSpacing:1,textTransform:"uppercase"}}>Besøk registrert</div>
+        <div style={{fontSize:22,fontWeight:800,marginTop:6}}>{v.stationName}</div>
+        <div style={{fontSize:64,fontWeight:900,color:scoreColor(v.pct),marginTop:20,lineHeight:1}}>{v.pct}%</div>
+        <div style={{fontSize:14,color:"#666",marginTop:6}}>{scoreLabel(v.pct)}</div>
+        <button onClick={() => setView("home")}
+          style={{marginTop:40,padding:"14px 32px",background:INK,color:"#fff",borderRadius:10,fontWeight:700,fontSize:15}}>
+          Tilbake til stasjoner
+        </button>
+      </div>
+    );
+  }
+
+  if (view === "dash") {
+    const byStation = STATIONS.map(s => {
+      const sv = visits.filter(v => v.stationId === s.id);
+      const last = sv[0];
+      return { ...s, last, count: sv.length };
+    }).sort((a,b) => (a.last?.pct || 999) - (b.last?.pct || 999));
+
+    return (
+      <div style={{padding:"20px 20px 40px"}}>
+        <TopBar onBack={() => setView("roles")} title="Lederdashboard" />
+        <div style={{display:"flex",gap:10,margin:"20px 0"}}>
+          <Stat label="Besøk totalt" value={visits.length} />
+          <Stat label="Stasjoner" value={new Set(visits.map(v => v.stationId)).size} />
+          <Stat label="Snitt-score" value={visits.length ? Math.round(visits.reduce((s,v)=>s+v.pct,0)/visits.length) + "%" : "—"} />
+        </div>
+
+        <h3 style={{fontSize:14,fontWeight:700,margin:"20px 0 10px",color:"#666",textTransform:"uppercase",letterSpacing:1}}>Stasjoner</h3>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {byStation.map(s => (
+            <div key={s.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:600}}>{s.name}</div>
+                <div style={{fontSize:11,color:"#999",marginTop:2}}>
+                  {s.last ? `${new Date(s.last.date).toLocaleDateString("nb-NO")} · ${s.count} besøk` : "Ikke besøkt"}
+                </div>
+              </div>
+              {s.last ? (
+                <div style={{background:scoreColor(s.last.pct),color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:13,fontWeight:700}}>
+                  {s.last.pct}%
+                </div>
+              ) : (
+                <div style={{color:"#bbb",fontSize:13}}>—</div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {visits.length > 0 && (
+          <>
+            <h3 style={{fontSize:14,fontWeight:700,margin:"28px 0 10px",color:"#666",textTransform:"uppercase",letterSpacing:1}}>Siste besøk</h3>
+            <div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {visits.slice(0,10).map(v => (
+                <div key={v.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600}}>{v.stationName}</div>
+                    <div style={{fontSize:11,color:"#999"}}>
+                      {new Date(v.date).toLocaleDateString("nb-NO", {day:"numeric",month:"short"})} · {v.role === "rs" ? "Regionssjef" : "Stasjonsleder"}
+                    </div>
+                  </div>
+                  <div style={{background:scoreColor(v.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:12,fontWeight:700}}>
+                    {v.pct}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function TopBar({ onBack, title }) {
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
+      <button onClick={onBack} style={{fontSize:15,color:"#666",padding:"6px 0"}}>← Tilbake</button>
+      <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:"#999"}}>{title}</div>
+    </div>
+  );
+}
+
+function Stat({ label, value }) {
+  return (
+    <div style={{flex:1,background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+      <div style={{fontSize:22,fontWeight:800,color:INK}}>{value}</div>
+      <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{label}</div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
