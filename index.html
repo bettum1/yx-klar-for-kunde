@@ -62,62 +62,75 @@ const lFor=(m,v)=>v===0?{l:"Ikke godkjent",c:"#dc2626"}:v>=m?{l:"Godkjent",c:"#1
 const pCol=p=>p>=85?"#16a34a":p>=70?"#65a30d":p>=55?"#d97706":p>=40?"#ea580c":"#dc2626";
 const pLbl=p=>p>=85?"Utmerket":p>=70?"Godt":p>=55?"OK":p>=40?"Trenger oppfølging":"Kritisk";
 
-/* ── Journey ── */
+/* ── Journey — 20 items, 5 per step ── */
 const JOURNEY=[
   {id:"ankomst",name:"Ankomst & synlighet",icon:"🚗",step:1,img:"img/journey-2-pumpe.jpg",
    desc:"Hva ser bilisten fra veien? Ville du stoppet her?",
    items:[
-    {id:1,t:"Inn- og utkjøring uthevet, skilting synlig ved adkomst",q:"Hvordan oppleves innkjøringen fra kundenes side?",max:5},
-    {id:2,t:"Uteområdet ryddet for søppel og ugress. Dekke fritt for søl",q:"Hvem har ansvar for uterunden?",max:5},
-    {id:3,t:"All belysning ute fungerer og tent etter mørkets frembrudd",q:"Fast sjekk av belysning, spesielt vinterstid?",max:5},
-    {id:4,t:"Grøntområder velstelte. Ingen ugress, døde planter eller graffiti",q:"Hvor ofte vedlikeholdes grøntområder?",max:1},
-    {id:5,t:"Pumpetak rent, uten skader. Nattlys fungerer",q:"Når ble pumpetaket sist vurdert?",max:2},
-    {id:6,t:"Kun YX-godkjente reklamestativer. Gjeldende materiell iht. plan",q:"Hvem sjekker kampanjemateriell?",max:2},
-    {id:7,t:"Skilting ren, uten skader. Lysskilt fungerer",q:"Rutine for å melde skadet skilting?",max:2},
-    {id:8,t:"Toaletter rene, velstelte, luktfrie. Lys fungerer",q:"Hvor ofte sjekkes toalettet?",max:5},
-    {id:9,t:"Pumpeøyer fri for søppel. Søppelbeholdere ikke overfylte",q:"Fast rutine for pumpeøy?",max:2},
+    {id:1,t:"Helhetsinntrykk ute — ryddig, søppelfritt, skilting synlig ved adkomst",q:"Hva er det første inntrykket når du kjører inn? Ville du stoppet?",max:5},
+    {id:2,t:"Belysning — alt fungerer ute, tent etter mørkets frembrudd",q:"Har dere fast rutine for belysningssjekk?",max:5},
+    {id:3,t:"Pumpetak og skilting — rent, helt, kun YX-godkjent materiell",q:"Når ble pumpetak og skilting sist vurdert?",max:5},
+    {id:4,t:"Toaletter — rene, velstelte, luktfrie, lys fungerer",q:"Hvor ofte sjekkes toalettet gjennom dagen?",max:5},
+    {id:5,t:"Pumpeøyer og grøntområder — frie for søppel, velstelte, ingen ugress",q:"Hvem har ansvar for uterunden?",max:5},
   ]},
   {id:"tanking",name:"Tanking & betaling",icon:"⛽",step:2,img:"img/journey-3-pumpedetalj.jpg",
    desc:"Kunden står her 3–5 minutter. Kvalitet på utstyr og informasjon teller.",
    items:[
-    {id:14,t:"Alle pumper fungerer",q:"Hva gjør dere når en pumpe feiler?",max:5},
-    {id:15,t:"Lesbare retningslinjer, produktbetegnelser, ute-av-drift-skilt",q:"Enhetlig skilt tilgjengelig?",max:2},
-    {id:16,t:"Pistoler, håndtak, slanger uten skade. Sprutsikring på alle",q:"Dokumentasjon av feil?",max:2},
-    {id:17,t:"Pumper og håndtak rene. Hansker for dieselkunder",q:"Hvem rengjør, hvor ofte?",max:2},
-    {id:18,t:"Nål, vann, tørkepapir og søppelkasse ved hver øy",q:"Daglig sjekk av forbruksmateriell?",max:2},
-    {id:19,t:"Sikkerhetsskilt synlige, lesbare, rene og ikke falmet",q:"Sist gjennomgått?",max:2},
-    {id:20,t:"Brannslukkere tilgjengelige, fulle, innenfor dato",q:"Månedlig sjekk — hvem?",max:2},
-    {id:21,t:"Betaling ved pumpe — tydelig skiltet, utstyr fungerer",q:"Hvordan løses betalingsproblemer ute?",max:2},
+    {id:6,t:"Alle pumper fungerer og er rene",q:"Hva gjør dere når en pumpe feiler? Hvor fort fikses det?",max:5},
+    {id:7,t:"Pistoler, slanger og håndtak hele, med sprutsikring og hansker for diesel",q:"Dokumenteres feil? Hvem følger opp?",max:5},
+    {id:8,t:"Forbruksmateriell — nål, vann, tørkepapir, søppelkasse ved hver øy",q:"Sjekkes dette daglig? Hvem har ansvaret?",max:5},
+    {id:9,t:"Sikkerhet — brannslukkere tilgjengelige, innenfor dato. Sikkerhetsskilt synlige",q:"Når ble brannslukkere sist kontrollert?",max:5},
+    {id:10,t:"Betaling ved pumpe — tydelig skiltet, utstyr fungerer",q:"Hvordan løses betalingsproblemer ute?",max:5},
   ]},
   {id:"butikk",name:"Inn i butikken",icon:"🛒",step:3,img:"img/journey-4-fasade.jpg",
    desc:"Overgangen fra ute til inne. Siktlinje, renhold og produkttilgjengelighet.",
    items:[
-    {id:22,t:"Inngangsparti, gangveier og ramper rene og frie",q:"Ansvar for inngangssonen?",max:2},
-    {id:23,t:"Fasade, dører og vinduer rene, hele og fungerer. Uten graffiti",q:"Sist vurdert? Rutine for skademelding?",max:2},
-    {id:25,t:"Gulv, vegger og tak rene. Gulvmatter rene",q:"Rutine for gulvrunde?",max:1},
-    {id:26,t:"Alt lys i butikken fungerer og er tent",q:"Melding av defekter?",max:1},
-    {id:27,t:"Kjøleskap og frysere slått på og fungerer",q:"Daglig temperaturkontroll?",max:2},
-    {id:28,t:"Reoler, hyller, kjøl/frys rene. Produkter sortert",q:"Fulle hyller — hvordan?",max:1},
-    {id:29,t:"Planogram og oversiktsplan implementert",q:"Planogramsjekk — hvem?",max:1},
-    {id:30,t:"Priser klart angitt med godkjente skilt",q:"Sjekk priser mot kasse?",max:1},
-    {id:31,t:"Kampanjemateriell iht. plan. Uhindret siktlinje inn",q:"Kampanjer — sist oppdatert?",max:2},
-    {id:32,t:"Kjernekategorier representert, 5 mestselgende på lager",q:"OU-lista — aktiv bruk?",max:5},
-    {id:33,t:"Smøremidler iht. planogram, ikke utsolgt",q:"Smøremiddelsortiment ok?",max:2},
-    {id:35,t:"Ingen utløpte produkter. Eldste dato fremst",q:"Datosjekk — hvem?",max:2},
-    {id:36,t:"Varmmat/drikke fungerer, rent. Matvaresikkerhet følges",q:"Opplæring matvaresikkerhet?",max:2},
-    {id:37,t:"Daglig rengjøring registrert. Temperaturer med tidspunkt",q:"Renholdslogg synlig?",max:2},
-    {id:38,t:"Rømningsveier frie og tydelig merket",q:"Daglig sjekk?",max:2},
-    {id:39,t:"Disk ren, ryddig, ikke overfylt",q:"Kassesonen — sist ryddet?",max:1},
-    {id:40,t:"Kort/lojalitet-info ved disk. Alle betalingsformer akseptert av ansatte",q:"YX-appen — introduseres aktivt?",max:2},
+    {id:11,t:"Renhold — gulv, hyller, disk, inngangsparti rent og ryddig",q:"Hvordan ser rutinen for renhold ut gjennom dagen?",max:5},
+    {id:12,t:"Varesortiment — planogram fulgt, fulle hyller, ingen utløpte varer",q:"Hvem sjekker datomerking? Hvor ofte?",max:5},
+    {id:13,t:"Kampanje og eksponering — materiell iht. plan, uhindret siktlinje inn",q:"Er gjeldende kampanje på plass? Når ble det sist sjekket?",max:5},
+    {id:14,t:"Mat, drikke, kjøl/frys — fungerer, rent, temperaturlogg ført",q:"Er temperaturlogg tilgjengelig? Matvaresikkerhet fulgt?",max:5},
+    {id:15,t:"Sikkerhet og betaling — rømningsveier frie, alle betalingsformer akseptert",q:"Noe friksjon med betalingsformer? Aksepteres YX-appen?",max:5},
   ]},
   {id:"motet",name:"Møtet med oss",icon:"👥",step:4,img:"img/journey-5-butikkvegg.jpg",
    desc:"Det siste inntrykket. Her bygges lojalitet — eller mistes.",
    items:[
-    {id:42,t:"Ansatte i uniform, navneskilt, vendt mot kunden",q:"Uniformskrav i praksis?",max:5},
-    {id:43,t:"Hilser, takker, øyekontakt, smiler. Kompetente",q:"Beste mersalgsfraser dere bruker?",max:5},
-    {id:44,t:"Betaling håndteres korrekt, kvittering, riktig veksle",q:"Trening på kassehåndtering?",max:5},
+    {id:16,t:"Uniform, navneskilt — ansatte er presentable og gjenkjennelige",q:"Følges uniformskravet i praksis? Har alle navneskilt?",max:5},
+    {id:17,t:"Hilser, øyekontakt, smiler — kunden føler seg sett og velkommen",q:"Hva gjør dere for at kunden skal føle seg sett?",max:5},
+    {id:18,t:"Kompetanse — kan svare på spørsmål, kjenner sortimentet",q:"Når ble det sist gjort produktopplæring?",max:5},
+    {id:19,t:"Kassehåndtering — korrekt betaling, kvittering, effektiv avvikling",q:"Opplæring i kassehåndtering — når sist?",max:5},
+    {id:20,t:"Mersalg — anbefaler kampanjeprodukter, nevner YX-appen",q:"Hva er de beste mersalgsfrasene dere bruker? Nevnes appen?",max:5},
   ]},
 ];
+
+/* ── HMS Årshjul ── */
+const HMS=[
+  {id:"t1",name:"Tertial 1",period:"Jan–Apr",icon:"📋",focus:"HMS-revisjon og planlegging",items:[
+    {id:"h1",t:"Årlig revisjon av HMS-dokumentasjon"},
+    {id:"h2",t:"Risikovurdering oppdatert med tiltak"},
+    {id:"h3",t:"Beredskapsplan gjennomgått med ansatte"},
+    {id:"h4",t:"Vernerunde gjennomført (vinter)"},
+    {id:"h5",t:"Varetelling — hovedtelling gjennomført"},
+    {id:"h6",t:"Brannslukkeutstyr kontrollert"},
+    {id:"h7",t:"Nødbelysning og rømningsveier sjekket"},
+  ]},
+  {id:"t2",name:"Tertial 2",period:"Mai–Aug",icon:"☀️",focus:"Sommerdrift og brannsikkerhet",items:[
+    {id:"h8",t:"HMS-opplæring for sommervikarer gjennomført"},
+    {id:"h9",t:"Sommerklargjøring uteareal"},
+    {id:"h10",t:"Brann- og grilltiltak gjennomgått"},
+    {id:"h11",t:"Førstehjelp — utstyr sjekket, prosedyrer gjennomgått"},
+    {id:"h12",t:"Kjemikalier — oppbevaring og datablader sjekket"},
+    {id:"h13",t:"Kjøle-/fryseanlegg kontrollert for sommerdrift"},
+  ]},
+  {id:"t3",name:"Tertial 3",period:"Sep–Des",icon:"❄️",focus:"Vinterklargjøring og årsavslutning",items:[
+    {id:"h14",t:"Vinterklargjøring — salt, utstyr, varmekabler"},
+    {id:"h15",t:"Vernerunde gjennomført (høst)"},
+    {id:"h16",t:"Varme- og ventilasjonsanlegg kontrollert"},
+    {id:"h17",t:"HMS-årsrapport utarbeidet"},
+    {id:"h18",t:"Medarbeidersamtaler med HMS-fokus"},
+    {id:"h19",t:"HMS-plan for neste år utarbeidet"},
+  ]},
+];
+const curT=()=>{const m=new Date().getMonth()+1;return m<=4?"t1":m<=8?"t2":"t3";};
 
 function App(){
   const[loading,setLoading]=useState(true);
@@ -145,6 +158,7 @@ function App(){
   const[loginLoad,setLoginLoad]=useState(false);
   const[showRef,setShowRef]=useState(false);
   const[showAll,setShowAll]=useState(false);
+  const[hms,setHms]=useState({});
 
   useEffect(()=>{
     sb.auth.getSession().then(({data:{session}})=>{if(session){setUser(session.user);loadProf(session.user.id);}else setLoading(false);});
@@ -159,6 +173,19 @@ function App(){
     const{data:v}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);setVisits(v||[]);
     const{data:se}=await sb.from("visits").select("*").eq("visit_role","sl").order("created_at",{ascending:false}).limit(300);setSelfEvals(se||[]);
     if(navigator.geolocation)navigator.geolocation.getCurrentPosition(p=>setLoc({lat:p.coords.latitude,lng:p.coords.longitude}),()=>{});
+    // Load HMS
+    const{data:hd}=await sb.from("hms_checks").select("*").eq("year",new Date().getFullYear());
+    if(hd){const h={};hd.forEach(r=>{if(r.checked)h[r.station_id+"_"+r.item_id]=true;});setHms(h);}
+  };
+  const hmsToggle=async(stId,itemId)=>{
+    const k=stId+"_"+itemId;const v=!hms[k];
+    setHms(h=>({...h,[k]:v}));
+    const tert=curT();
+    if(v){
+      await sb.from("hms_checks").upsert({station_id:stId,tertial:tert,item_id:itemId,year:new Date().getFullYear(),checked:true,checked_by:user.id,checked_at:new Date().toISOString()},{onConflict:"station_id,tertial,item_id,year"});
+    } else {
+      await sb.from("hms_checks").update({checked:false}).match({station_id:stId,item_id:itemId,year:new Date().getFullYear()});
+    }
   };
   const login=async()=>{setLoginErr("");setLoginLoad(true);const{error}=await sb.auth.signInWithPassword({email:loginEmail,password:loginPw});if(error)setLoginErr("Feil e-post eller passord");setLoginLoad(false);};
   const logout=async()=>{await sb.auth.signOut();};
@@ -265,6 +292,16 @@ function App(){
             ))}
           </div>
         </div>
+
+        {/* HMS Årshjul */}
+        <button onClick={()=>setView("hms")} style={{width:"100%",background:"#fff",border:"2px solid "+D,borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+          <span style={{fontSize:24}}>⚠️</span>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:14,color:D}}>HMS Årshjul</div>
+            <div style={{fontSize:11,color:"#888",marginTop:1}}>Gjeldende: {HMS.find(t=>t.id===curT())?.name} ({HMS.find(t=>t.id===curT())?.period})</div>
+          </div>
+          <span style={{color:"#999",fontSize:14}}>→</span>
+        </button>
 
         {/* Search */}
         <div style={{position:"relative",marginBottom:14}}>
@@ -520,6 +557,72 @@ function App(){
         )}
         <div className="fadeUp" style={{color:"#4ade80",fontSize:12,marginTop:14,fontWeight:600,animationDelay:"350ms"}}>✓ Lagret i database</div>
         <button className="fadeUp" onClick={()=>setView("home")} style={{marginTop:40,padding:"15px 32px",background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15,animationDelay:"400ms"}}>Tilbake til stasjoner</button>
+      </div>
+    );
+  }
+
+  /* ── HMS ÅRSHJUL ── */
+  if(view==="hms"){
+    const ct=curT();
+    // If stasjonsleder, auto-select their station
+    const hmsSt=isSL&&stations.length===1?stations[0]:station;
+    return(
+      <div style={{paddingBottom:40}}>
+        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <button onClick={()=>{setView("home");}} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>← Tilbake</button>
+          <span style={{color:"#fff",fontSize:14,fontWeight:700}}>HMS Årshjul</span>
+          <span style={{width:60}}/>
+        </div>
+        <div style={{padding:"16px 20px"}}>
+          {!hmsSt?(
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:12}}>Velg stasjon</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {filt.slice(0,10).map(s=>(
+                  <button key={s.id} onClick={()=>setStation(s)} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"12px 16px",textAlign:"left",fontWeight:600,color:D}}>{s.name}</button>
+                ))}
+              </div>
+            </div>
+          ):(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+                <div>
+                  <div style={{fontSize:18,fontWeight:800,color:D}}>{hmsSt.name}</div>
+                  <div style={{fontSize:12,color:"#888"}}>HMS {new Date().getFullYear()}</div>
+                </div>
+                {!isSL&&<button onClick={()=>setStation(null)} style={{fontSize:12,color:B,fontWeight:600}}>Bytt stasjon</button>}
+              </div>
+              {HMS.map(t=>{
+                const ic=t.id===ct;
+                const ck=t.items.filter(i=>hms[hmsSt.id+"_"+i.id]).length;
+                return(
+                  <div key={t.id} style={{marginBottom:14,border:ic?`2px solid ${R}`:"1px solid #eae7df",borderRadius:14,overflow:"hidden",background:"#fff"}}>
+                    <div style={{padding:"12px 16px",background:ic?R+"08":"#fafaf7",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:15,fontWeight:700,color:D}}>
+                          {t.icon} {t.name} {ic&&<span style={{fontSize:10,fontWeight:800,color:R,background:R+"15",padding:"2px 8px",borderRadius:5,marginLeft:6}}>NÅ</span>}
+                        </div>
+                        <div style={{fontSize:11,color:"#888",marginTop:2}}>{t.period} — {t.focus}</div>
+                      </div>
+                      <div style={{fontSize:14,fontWeight:800,color:ck===t.items.length?"#16a34a":ic?R:"#999"}}>{ck}/{t.items.length}</div>
+                    </div>
+                    <div style={{padding:"6px 16px 14px"}}>
+                      {t.items.map(item=>{
+                        const done=hms[hmsSt.id+"_"+item.id];
+                        return(
+                          <button key={item.id} onClick={()=>hmsToggle(hmsSt.id,item.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:"1px solid #f5f3ee",textAlign:"left"}}>
+                            <div style={{width:26,height:26,borderRadius:7,border:done?"none":`2px solid ${ic?R:"#ccc"}`,background:done?"#16a34a":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{done&&"✓"}</div>
+                            <div style={{fontSize:13,fontWeight:done?500:600,color:done?"#16a34a":D,textDecoration:done?"line-through":"none"}}>{item.t}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     );
   }
