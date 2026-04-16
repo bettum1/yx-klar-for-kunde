@@ -406,7 +406,7 @@ function App(){
             const d=loc&&s.lat?dist(s):null;
             const distTxt=d!==null&&d<500?(d<1?Math.round(d*1000)+" m":d.toFixed(1)+" km"):null;
             return(
-              <button key={s.id} onClick={()=>{setStation(s);setShowAll(false);setView("audit");}} className="fadeUp" style={{background:"#fff",border:"1px solid #eae7df",borderRadius:14,padding:"14px 16px",textAlign:"left",transition:"box-shadow .15s"}}>
+              <button key={s.id} onClick={()=>{if(isRS||isLeder){setStationView(s);setView("stationDetail");}else{setStation(s);setView("audit");}setShowAll(false);}} className="fadeUp" style={{background:"#fff",border:"1px solid #eae7df",borderRadius:14,padding:"14px 16px",textAlign:"left",transition:"box-shadow .15s"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
