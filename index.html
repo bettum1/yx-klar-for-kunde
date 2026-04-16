@@ -781,6 +781,102 @@ function App(){
             ))}
           </div>
 
+          {/* Top 3 / Bottom 3 */}
+          {stScores.length>=3&&(<>
+            <div style={{display:"flex",gap:12,marginBottom:20}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:8}}>🏆 Topp 3</div>
+                {[...stScores].sort((a,b)=>(b.lastSL?.pct??0)-(a.lastSL?.pct??0)).slice(0,3).map((s,i)=>(
+                  <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 12px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:14,fontWeight:800,color:"#16a34a"}}>{i+1}.</span>
+                      <span style={{fontSize:12,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:800,color:"#16a34a"}}>{s.lastSL?.pct}%</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#dc2626",marginBottom:8}}>⚠️ Trenger oppfølging</div>
+                {[...stScores].sort((a,b)=>(a.lastSL?.pct??100)-(b.lastSL?.pct??100)).slice(0,3).map((s,i)=>(
+                  <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:14,fontWeight:800,color:"#dc2626"}}>{i+1}.</span>
+                      <span style={{fontSize:12,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                    </div>
+                    <span style={{fontSize:12,fontWeight:800,color:"#dc2626"}}>{s.lastSL?.pct}%</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>)}
+
+          {/* Score per area */}
+          {(()=>{
+            const allV=slV.filter(v=>v.scores&&Object.keys(v.scores).length>0);
+            if(!allV.length)return null;
+            const areas=JOURNEY.map(j=>{
+              let tot=0,max=0;
+              allV.forEach(v=>{j.items.forEach(item=>{const s=v.scores?.[String(item.id)];if(s!==undefined&&!v.na_items?.includes(String(item.id))){tot+=s;max+=item.max;}});});
+              return{name:j.name,icon:j.icon,pct:max>0?Math.round(tot/max*100):0};
+            });
+            return(
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:10}}>Score per område (snitt alle stasjoner)</div>
+                {areas.map(a=>(
+                  <div key={a.name} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"12px 14px",marginBottom:6}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                      <span style={{fontSize:13,fontWeight:700,color:D}}>{a.icon} {a.name}</span>
+                      <span style={{fontSize:14,fontWeight:800,color:pCol(a.pct)}}>{a.pct}%</span>
+                    </div>
+                    <div style={{height:6,background:"#f0ede5",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",background:pCol(a.pct),width:a.pct+"%",borderRadius:3,transition:"width .3s"}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {/* Score per question */}
+          {(()=>{
+            const allV=slV.filter(v=>v.scores&&Object.keys(v.scores).length>0);
+            if(!allV.length)return null;
+            const qScores=JOURNEY.flatMap(j=>j.items.map(item=>{
+              let tot=0,cnt=0;
+              allV.forEach(v=>{const s=v.scores?.[String(item.id)];if(s!==undefined&&!v.na_items?.includes(String(item.id))){tot+=s;cnt++;}});
+              const avg=cnt>0?Math.round(tot/cnt*10)/10:null;
+              const pct=cnt>0?Math.round(tot/(cnt*item.max)*100):null;
+              return{...item,avg,pct,cnt,area:j.icon};
+            })).filter(q=>q.pct!==null).sort((a,b)=>a.pct-b.pct);
+            return(
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:4}}>Score per spørsmål (lavest først)</div>
+                <div style={{fontSize:11,color:"#999",marginBottom:10}}>Viser hvor vi har mest å gå på</div>
+                {qScores.map(q=>{
+                  const parts=q.t.split(" — ");
+                  return(
+                  <div key={q.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <span style={{fontSize:12,marginRight:4}}>{q.area}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:D}}>{parts[0]}</span>
+                        {parts[1]&&<span style={{fontSize:11,color:"#888"}}> — {parts[1]}</span>}
+                      </div>
+                      <div style={{flexShrink:0,textAlign:"right"}}>
+                        <div style={{fontSize:13,fontWeight:800,color:pCol(q.pct)}}>{q.pct}%</div>
+                        <div style={{fontSize:9,color:"#999"}}>{q.avg}/{q.id<=20?5:q.max}</div>
+                      </div>
+                    </div>
+                    <div style={{height:4,background:"#f0ede5",borderRadius:2,marginTop:6,overflow:"hidden"}}>
+                      <div style={{height:"100%",background:pCol(q.pct),width:q.pct+"%",borderRadius:2}}/>
+                    </div>
+                  </div>
+                );})}
+              </div>
+            );
+          })()}
+
           {/* Gap analysis */}
           {stScores.filter(s=>s.gap!==null).length>0&&(
             <div style={{marginBottom:20}}>
