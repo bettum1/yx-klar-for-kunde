@@ -18,7 +18,6 @@
   textarea{font-family:inherit;font-size:15px;border:none;outline:none;background:transparent;color:inherit;resize:none}
   input[type="file"]{display:none}
   @keyframes rec{0%,100%{opacity:1}50%{opacity:.3}}
-  .gap-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
 </style>
 </head>
 <body>
@@ -33,49 +32,26 @@ const LOGO_C = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA4QAAASNCAYAAAAb5p
 const YX_RED = "#CF122D";
 const YX_DARK = "#0C2340";
 
-/* ── SCORE SYSTEM ── */
-const LABELS = {
-  5: [{v:0,l:"Ikke godkjent",c:"#dc2626"},{v:1,l:"Svakt",c:"#f97316"},{v:2,l:"Mangler",c:"#eab308"},{v:3,l:"OK",c:"#84cc16"},{v:4,l:"Bra",c:"#22c55e"},{v:5,l:"Godkjent",c:"#16a34a"}],
-  2: [{v:0,l:"Ikke godkjent",c:"#dc2626"},{v:1,l:"Delvis",c:"#eab308"},{v:2,l:"Godkjent",c:"#16a34a"}],
-  1: [{v:0,l:"Nei",c:"#dc2626"},{v:1,l:"Ja",c:"#16a34a"}],
-};
-const labelFor = (max, val) => (LABELS[max]||LABELS[5]).find(l=>l.v===val);
-
-/* ── AUDIO RECORDER ── */
-function useRecorder() {
-  const [recording, setRecording] = useState(false);
-  const mr = useRef(null), chunks = useRef([]);
-  const start = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-      const m = new MediaRecorder(stream, {mimeType: MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4'});
-      chunks.current = [];
-      m.ondataavailable = e => { if(e.data.size>0) chunks.current.push(e.data); };
-      mr.current = m; m.start(); setRecording(true);
-    } catch(e) { alert("Gi tilgang til mikrofon."); }
-  }, []);
-  const stop = useCallback(() => new Promise(res => {
-    const m = mr.current;
-    if(!m||m.state==="inactive"){res(null);return;}
-    m.onstop = () => { const b=new Blob(chunks.current,{type:m.mimeType}); const r=new FileReader(); r.onloadend=()=>res(r.result); r.readAsDataURL(b); m.stream.getTracks().forEach(t=>t.stop()); setRecording(false); };
-    m.stop();
-  }), []);
-  return {recording, start, stop};
+/* ── SPEECH TO TEXT ── */
+function SpeechBtn({onText}) {
+  const [on, setOn] = useState(false);
+  const rRef = useRef(null);
+  const toggle = () => {
+    if (on) { rRef.current?.stop(); setOn(false); return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { alert("Talegjenkjenning støttes ikke i denne nettleseren. Bruk Chrome, eller trykk mikrofon-ikonet på tastaturet."); return; }
+    const r = new SR();
+    r.lang = "nb-NO"; r.continuous = true; r.interimResults = false;
+    r.onresult = e => { for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal) onText(e.results[i][0].transcript);} };
+    r.onerror = () => setOn(false);
+    r.onend = () => setOn(false);
+    rRef.current = r; r.start(); setOn(true);
+  };
+  return <button onClick={toggle} style={{padding:"5px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:on?YX_RED:"#f0ede5",color:on?"#fff":"#666",animation:on?"rec 1s infinite":"none",whiteSpace:"nowrap",flexShrink:0}}>{on?"⏹ Stopp":"🎙️ Tale"}</button>;
 }
 
-function AudioBtn({clip, onRecord, onDelete}) {
-  const {recording, start, stop} = useRecorder();
-  const aRef = useRef();
-  const toggle = async () => { if(recording){const d=await stop();if(d)onRecord(d);}else start(); };
-  return (
-    <div style={{display:"flex",alignItems:"center",gap:4}}>
-      <button onClick={toggle} style={{padding:"5px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:recording?YX_RED:"#f0ede5",color:recording?"#fff":"#666",animation:recording?"rec 1s infinite":"none",whiteSpace:"nowrap"}}>{recording?"⏹ Stopp":"🎙️"}</button>
-      {clip&&<><button onClick={()=>{const a=aRef.current;a&&a.paused?a.play():a.pause();}} style={{padding:"4px 6px",borderRadius:4,fontSize:11,background:"#e8f5e9",color:"#2e7d32"}}>▶️</button><button onClick={onDelete} style={{padding:"4px 6px",borderRadius:4,fontSize:11,background:"#fef5f5",color:"#c62828"}}>✕</button><audio ref={aRef} src={clip}/></>}
-    </div>
-  );
-}
-
-function PhotoCapture({photos, onAdd, onRemove}) {
+/* ── PHOTO ── */
+function PhotoCapture({photos,onAdd,onRemove}) {
   const ref = useRef();
   const hf = e => { const f=e.target.files?.[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>onAdd(ev.target.result); r.readAsDataURL(f); e.target.value=""; };
   return (
@@ -87,372 +63,339 @@ function PhotoCapture({photos, onAdd, onRemove}) {
   );
 }
 
-/* ── CAMPAIGN DATA (K-5, uke 17-20) ── */
+/* ── SCORE OPTIONS: 3 + N/A ── */
+const scoreOpts = (max) => [
+  {v:0, l:"Ikke godkjent", c:"#dc2626"},
+  {v:Math.round(max/2), l:"Delvis", c:"#eab308"},
+  {v:max, l:"Godkjent", c:"#16a34a"},
+];
+const labelFor = (max,val) => val===0?{l:"Ikke godkjent",c:"#dc2626"}:val===max?{l:"Godkjent",c:"#16a34a"}:{l:"Delvis",c:"#eab308"};
+
+/* ── CAMPAIGN K-5 ── */
 const CAMPAIGN = {
-  period: "K-5 · Uke 17–20",
-  items: [
-    {type:"A",name:"Boller 3pk",price:"3 for 39,-",placement:"1b + 2b + 3",note:"Hveteboller, Rosinboller, Sjokoladeboller. Nye bolleposer fra Kolly."},
-    {type:"B",name:"Uslåelig Burger",price:"",placement:"1b + 2b + 3",note:"Nytt burgerkonsept: Bacon Krønsj, Biff & Biff, YX Spesial. Burgerhefte på Happeo."},
-    {type:"Drikke",name:"Coca-Cola 0,5l",price:"2 for 55,- (+pant)",placement:"Cling-filmer, A4 plakater",note:"Frivillig. Aksepter i Shop24."},
-    {type:"Drikke",name:"Monster/Burn/Powerade 0,5l",price:"2 for 65,- (+pant)",placement:"Cling-filmer, A4 plakater",note:"Frivillig. Aksepter i Shop24."},
-    {type:"Drikke",name:"Red Bull 250ml",price:"2 for 49,- (+pant)",placement:"Cling-film, A4 plakat",note:"Frivillig. 10% fakturarabatt."},
-    {type:"Kiosk",name:"Kick (Lemon/Original/Seasalt)",price:"2 for 15,-",placement:"Diskdisplay",note:"Auto på kassen."},
-    {type:"Kiosk",name:"Mars sjokolade (Snickers/Twix/Bounty)",price:"2 for 39,-",placement:"Endereol hylle 1-2",note:"Auto på kassen."},
-    {type:"Kiosk",name:"KIMS 80g",price:"2 for 40,-",placement:"Endereol hylle 3",note:"Auto på kassen."},
-    {type:"Tilbehør",name:"Vestlandslefsa",price:"Kr 15,-",placement:"Ved kaffemaskin/kasse",note:"Frivillig. Display fra Baxt."},
-    {type:"Is",name:"Krone-Is fokus",price:"Kun synlighet",placement:"A4 plakat, stickers",note:"Salgskonkurranse Diplom-Is t.o.m. 18. mai!"},
-    {type:"COOP",name:"Husk bonus",placement:"Vegg plass 4, pumper plass 2a",note:"Videreføring fra K-3/K-4. Bruk eksisterende materiell."},
+  period:"K-5 · Uke 17–20",
+  items:[
+    {name:"Boller 3pk",price:"3 for 39,-",placement:"1b + 2b + 3"},
+    {name:"Uslåelig Burger",price:"",placement:"1b + 2b + 3",note:"Nytt konsept! Burgerhefte på Happeo."},
+    {name:"Coca-Cola 0,5l",price:"2 for 55,-",placement:"Cling + A4"},
+    {name:"Monster/Burn 0,5l",price:"2 for 65,-",placement:"Cling + A4"},
+    {name:"Red Bull 250ml",price:"2 for 49,-",placement:"Cling + A4"},
+    {name:"Kick",price:"2 for 15,-",placement:"Diskdisplay"},
+    {name:"Snickers/Twix/Bounty",price:"2 for 39,-",placement:"Endereol"},
+    {name:"KIMS 80g",price:"2 for 40,-",placement:"Endereol"},
+    {name:"Vestlandslefsa",price:"Kr 15,-",placement:"Kaffemaskin/kasse"},
+    {name:"Krone-Is",price:"Fokus",placement:"A4 + stickers"},
+    {name:"COOP bonus",price:"",placement:"Vegg 4, pumper 2a"},
   ]
 };
 
-/* ── RFC DATA ── */
+/* ── RFC — CUSTOMER JOURNEY STRUCTURE ── */
 const RFC = [
-  { id:"uteomrade", name:"Uteområde", icon:"🏪",
-    intro:"Førsteinntrykket. Det kunden ser før de bestemmer seg for å stoppe.",
+  { id:"ankomst", name:"1. Ankomst & synlighet", icon:"🚗",
+    img:"img/journey-2-pumpe.jpg",
+    intro:"Kundereisens start: hva ser bilisten fra veien? Ville du stoppet her?",
     items:[
-      {id:1, text:"Uthevet inn- og utkjøring, skilting for utkjøring godt synlig ved adkomst og påfyllingspunkter", talk:"Hvordan oppleves innkjøringen fra kundenes side?", max:5},
-      {id:2, text:"Uteområdet ryddet for søppel og ugress. Dekke fritt for olje og søl. Avløpskanaler rene med fritt løp og lokk", talk:"Hvem har ansvar for uterunden i løpet av dagen?", max:5},
-      {id:3, text:"Alt lys ute, pumpetak og stasjonsbelysning fungerer og tent etter mørkets frembrudd", talk:"Har dere fast sjekk av belysning, spesielt vinterstid?", max:5},
-      {id:4, text:"Grøntområder velstelte og fri for søppel. Ingen ugress eller døde planter. Gjerder fri for graffiti", talk:"Hvor ofte gjennomføres vedlikehold av grøntområder?", max:1},
-      {id:5, text:"Pumpetak rent, uten skader, uten avskallende maling. Nattlys og minibanker fungerer", talk:"Når ble pumpetaket sist vurdert for vedlikehold?", max:2},
-      {id:6, text:"Kun YX-godkjente reklamestativer. Alle plakatrammer har gjeldende materiale iht. markedsplan", talk:"Hvem sjekker at kampanjemateriell er riktig rigget?", max:2},
-      {id:7, text:"Skilting ren og uten skader. Lysskilt fungerer", talk:"Har dere rutine for å melde inn skadet skilting?", max:2},
-      {id:8, text:"Toaletter rene, velstelte, luktfrie og fungerer. Lys fungerer", talk:"Hvor ofte sjekkes toalettet i løpet av en dag?", max:5},
-      {id:9, text:"Pumpeøyene fri for søppel, dekke fritt for olje/søl. Søppelbeholdere ikke overfylte", talk:"Fast rutine for tømming og plukking på pumpeøy?", max:2},
+      {id:1, text:"Inn- og utkjøring uthevet, skilting godt synlig ved adkomst og påfyllingspunkter", talk:"Hvordan oppleves innkjøringen fra kundenes side?", max:5},
+      {id:2, text:"Uteområdet ryddet for søppel og ugress. Dekke fritt for olje/søl. Avløp rene med lokk", talk:"Hvem har ansvar for uterunden?", max:5},
+      {id:3, text:"All belysning ute, pumpetak og stasjon fungerer og er tent etter mørkets frembrudd", talk:"Fast sjekk av belysning, spesielt vinterstid?", max:5},
+      {id:4, text:"Grøntområder velstelte. Ingen ugress, døde planter eller graffiti på gjerder", talk:"Hvor ofte vedlikeholdes grøntområder?", max:1},
+      {id:5, text:"Pumpetak rent, uten skader eller avskallende maling. Nattlys fungerer", talk:"Når ble pumpetaket sist vurdert?", max:2},
+      {id:6, text:"Kun YX-godkjente reklamestativer. Plakatrammer har gjeldende materiale iht. plan", talk:"Hvem sjekker at kampanjemateriell er riktig?", max:2},
+      {id:7, text:"Skilting ren, uten skader. Lysskilt fungerer", talk:"Rutine for å melde skadet skilting?", max:2},
+      {id:8, text:"Toaletter rene, velstelte, luktfrie. Lys fungerer", talk:"Hvor ofte sjekkes toalettet?", max:5},
+      {id:9, text:"Pumpeøyer fri for søppel, dekke fritt for søl. Søppelbeholdere ikke overfylte", talk:"Fast rutine for pumpeøy?", max:2},
     ]},
-  { id:"tanking", name:"Tanking", icon:"⛽",
-    intro:"Kunden står her i 3–5 minutter. Alt de ser teller.",
+  { id:"tanking", name:"2. Tanking & betaling", icon:"⛽",
+    img:"img/journey-3-pumpedetalj.jpg",
+    intro:"Kunden står her i 3–5 minutter. Kvalitet på utstyr og informasjon teller.",
     items:[
-      {id:14, text:"Alle pumper fungerer som de skal", talk:"Hva gjør dere når en pumpe feiler?", max:5},
-      {id:15, text:"Lesbare retningslinjer for pumpebruk. Produktbetegnelser over tappepistoler. Ute-av-drift-skilt på defekte pumper", talk:"Finnes enhetlig ute-av-drift-skilt?", max:2},
-      {id:16, text:"Tappepistoler, håndtak, slanger uten skade. Sprutsikring på alle", talk:"Hvordan dokumenteres feil på tankeutstyr?", max:2},
-      {id:17, text:"Pumper og håndtak rene, fri for flekker. Hansker til dieselkunder", talk:"Hvem rengjør pumpene, og hvor ofte?", max:2},
-      {id:18, text:"Nål, rent vann, radiatorvannkanne, tørkepapir og søppelkasse ved hver pumpeøy", talk:"Sjekkes forbruksmateriell daglig?", max:2},
-      {id:19, text:"Synlige sikkerhetsskilt lesbare fra alle påfyllingsposisjoner. Rene, uten skade, ikke falmet", talk:"Når ble sikkerhetsmerkingen sist gjennomgått?", max:2},
-      {id:20, text:"Brannslukkere tilgjengelige, fulle, innenfor utløpsdato. Synlige fra alle posisjoner", talk:"Hvem har månedlig brannutstyrssjekk?", max:2},
-      {id:21, text:"Betaling ved pumpe — skilt tydelige, utstyr fungerer iht. standard", talk:"Hvordan løses betalingsproblemer ute?", max:2},
+      {id:14, text:"Alle pumper fungerer", talk:"Hva gjør dere når en pumpe feiler?", max:5},
+      {id:15, text:"Lesbare retningslinjer, produktbetegnelser over pistoler, ute-av-drift-skilt", talk:"Enhetlig skilt tilgjengelig?", max:2},
+      {id:16, text:"Pistoler, håndtak, slanger uten skade. Sprutsikring på alle", talk:"Dokumentasjon av feil?", max:2},
+      {id:17, text:"Pumper og håndtak rene. Hansker for dieselkunder", talk:"Hvem rengjør, hvor ofte?", max:2},
+      {id:18, text:"Nål, vann, radiatorvann, tørkepapir og søppelkasse ved hver øy", talk:"Daglig sjekk av forbruksmateriell?", max:2},
+      {id:19, text:"Sikkerhetsskilt synlige, lesbare, rene og ikke falmet", talk:"Sist gjennomgått?", max:2},
+      {id:20, text:"Brannslukkere tilgjengelige, fulle, innenfor dato. Synlige fra alle posisjoner", talk:"Månedlig sjekk — hvem?", max:2},
+      {id:21, text:"Betaling ved pumpe — tydelig skiltet, utstyr fungerer", talk:"Hvordan løses betalingsproblemer ute?", max:2},
     ]},
-  { id:"butikk", name:"Butikk", icon:"🛒",
-    intro:"Kunden skal finne det de leter etter — og oppdage noe nytt.",
+  { id:"butikk", name:"3. Inn i butikken", icon:"🛒",
+    img:"img/journey-4-fasade.jpg",
+    intro:"Overgangen fra ute til inne. Siktlinje, renhold og produkttilgjengelighet.",
     campaign: true,
     items:[
-      {id:22, text:"Inngangsparti, gangveier, ramper rene og fri for søppel og hindringer", talk:"Hvem har ansvar for inngangssonen?", max:2},
-      {id:23, text:"Fasade, vinduer og dører rene, uten graffiti/flekker, ingen avskallende maling", talk:"Når ble fasaden sist vurdert?", max:2},
-      {id:24, text:"Dører og vinduer fungerer og er uten skade", talk:"Hvordan meldes skader til drift?", max:1},
-      {id:25, text:"Gulv, vegger og tak rene. Gulvmatter rene, ingen merker", talk:"Fast rutine for gulvrunde?", max:1},
-      {id:26, text:"Alt lys i butikklokalet fungerer og er tent", talk:"Hvem melder defekter?", max:1},
-      {id:27, text:"Alle kjøleskap og frysere slått på og fungerer", talk:"Daglig temperaturkontroll — hvem?", max:2},
-      {id:28, text:"Reoler, hyller, kjøl og frys rene. Produkter rene og sortert", talk:"Hvordan sikrer dere fulle hyller?", max:1},
-      {id:29, text:"Butikkplanogram og oversiktsplan implementert", talk:"Hvem har planogramsjekk?", max:1},
-      {id:30, text:"Priser klart angitt med godkjente skilt", talk:"Hvor ofte sjekkes priser mot kasse?", max:1},
-      {id:31, text:"Markedsføringsmateriell iht. planogram. Tilstrekkelig varer for kampanje. Uhindret siktlinje inn", talk:"Hvordan kommuniseres kampanjer internt?", max:2},
-      {id:32, text:"Alle kjernekategorier representert, de 5 mestselgende på lager (OU-liste). Godkjente leverandører", talk:"Følger dere OU-lista aktivt?", max:5},
-      {id:33, text:"Smøremidler i butikken iht. planogram. Ingen utsolgt", talk:"Hvordan håndteres smøremiddelsortimentet?", max:5},
-      {id:35, text:"Ingen utløpte produkter. Eldste datoer fremst. Ikke på gulvet", talk:"Hvem har ansvar for datosjekk?", max:2},
-      {id:36, text:"Varmmat/drikke-utstyr fungerer og er på. Rene områder. YX matvaresikkerhetsrutiner følges", talk:"Hvordan trenes nye på matvaresikkerhet?", max:2},
-      {id:37, text:"Daglig rengjøring registrert. Temperaturer registrert. Tidspunkt innfylt", talk:"Vises renholdsloggen tydelig?", max:2},
-      {id:38, text:"Alle rømningsveier frie og tydelig merket", talk:"Sjekkes rømningsveier daglig?", max:2},
-      {id:39, text:"Disk ikke overfylt, ren og ryddig", talk:"Når ble kassesonen sist ryddet?", max:1},
-      {id:40, text:"Skjemaer for kreditt/lojalitet/drivstoffkort ved disk. Alle betalingsformer godtas", talk:"Hvordan introduseres YX-appen?", max:2},
-      {id:41, text:"Ansatte godtar alle betalingsmetoder YX har anvist", talk:"Betalingsformer som skaper friksjon?", max:2},
+      {id:22, text:"Inngangsparti, gangveier og ramper rene og frie for hindringer", talk:"Ansvar for inngangssonen?", max:2},
+      {id:23, text:"Fasade, vinduer og dører rene, uten graffiti eller avskallende maling", talk:"Sist vurdert?", max:2},
+      {id:24, text:"Dører og vinduer fungerer, uten skade", talk:"Melding av skader?", max:1},
+      {id:25, text:"Gulv, vegger og tak rene. Gulvmatter rene", talk:"Rutine for gulvrunde?", max:1},
+      {id:26, text:"Alt lys i butikken fungerer og er tent", talk:"Melding av defekter?", max:1},
+      {id:27, text:"Kjøleskap og frysere slått på og fungerer", talk:"Daglig temperaturkontroll?", max:2},
+      {id:28, text:"Reoler, hyller, kjøl/frys rene. Produkter sortert", talk:"Fulle hyller — hvordan?", max:1},
+      {id:29, text:"Planogram og oversiktsplan implementert", talk:"Planogramsjekk — hvem?", max:1},
+      {id:30, text:"Priser klart angitt med godkjente skilt", talk:"Sjekk priser mot kasse?", max:1},
+      {id:31, text:"Kampanjemateriell iht. plan. Varer for kampanje. Uhindret siktlinje inn", talk:"Kampanjer internt?", max:2},
+      {id:32, text:"Kjernekategorier representert, 5 mestselgende på lager (OU-liste)", talk:"OU-lista — aktiv bruk?", max:5},
+      {id:33, text:"Smøremidler iht. planogram, ikke utsolgt", talk:"Smøremiddelsortiment?", max:5},
+      {id:35, text:"Ingen utløpte produkter. Eldste dato fremst. Ikke på gulvet", talk:"Datosjekk — hvem?", max:2},
+      {id:36, text:"Varmmat/drikke fungerer, rent. YX matvaresikkerhetsrutiner følges", talk:"Opplæring matvaresikkerhet?", max:2},
+      {id:37, text:"Daglig rengjøring registrert. Temperaturer registrert med tidspunkt", talk:"Renholdslogg synlig?", max:2},
+      {id:38, text:"Rømningsveier frie og tydelig merket", talk:"Daglig sjekk?", max:2},
+      {id:39, text:"Disk ren, ryddig, ikke overfylt", talk:"Kassesonen — sist ryddet?", max:1},
+      {id:40, text:"Skjemaer for kort/lojalitet ved disk. Alle betalingsformer godtas", talk:"YX-appen — introduksjon?", max:2},
+      {id:41, text:"Ansatte godtar alle anviste betalingsmetoder", talk:"Friksjon med betalingsformer?", max:2},
     ]},
-  { id:"butikkservice", name:"Butikkservice", icon:"👥",
-    intro:"Det siste møtet. Kundens siste inntrykk.",
+  { id:"motet", name:"4. Møtet med oss", icon:"👥",
+    intro:"Det siste inntrykket. Her bygges lojalitet — eller mistes.",
     items:[
-      {id:42, text:"Ansatte rene, velstelte, godkjent uniform med navneskilt, vendt mot kunden", talk:"Hvordan følges uniformskrav opp?", max:5},
-      {id:43, text:"Ansatte hilser, takker, øyekontakt, smiler, ser kunden i kø. Kompetente og hjelpsomme", talk:"Hvilke mersalgsfraser funker best?", max:5},
-      {id:44, text:"Betaling håndteres korrekt, kvittering og riktig vekslebeløp", talk:"Hvordan trenes kassehåndtering?", max:5},
+      {id:42, text:"Ansatte rene, velstelte, godkjent uniform, navneskilt, vendt mot kunden", talk:"Uniformskrav i praksis?", max:5},
+      {id:43, text:"Ansatte hilser, takker, øyekontakt, smiler, ser kunden i kø. Kompetente", talk:"Beste mersalgsfraser?", max:5},
+      {id:44, text:"Betaling håndteres korrekt, kvittering og riktig vekslebeløp", talk:"Trening kassehåndtering?", max:5},
     ]},
 ];
 
 const MAX_TOTAL = RFC.reduce((s,c) => s + c.items.reduce((a,b) => a+b.max, 0), 0);
 const STATIONS = [{id:"s001",name:"YX Tønsberg"},{id:"s002",name:"YX Horten"},{id:"s003",name:"YX Sandefjord"},{id:"s004",name:"YX Larvik"},{id:"s005",name:"YX Brokelandsheia"},{id:"s006",name:"YX Sande"},{id:"s007",name:"YX Øvre Årdal"},{id:"s008",name:"YX Drammen"}];
 
-/* ── HMS ÅRSHJUL (3 tertialer) ── */
-const HMS_TERTIALS = [
-  { id:"t1", name:"Tertial 1", period:"Januar – April", icon:"📋",
-    focus:"Årlig HMS-revisjon og planlegging",
-    items:[
-      {id:"h1", text:"Årlig revisjon av HMS-dokumentasjon", desc:"Gjennomgå og oppdater HMS-perm/system. Sikre at alle dokumenter er gyldige og tilgjengelige for ansatte."},
-      {id:"h2", text:"Oppdatering av risikovurdering", desc:"Gjennomfør risikovurdering for stasjonen. Vurder nye risikoer og oppdater tiltak. Dokumenter i avvikssystemet."},
-      {id:"h3", text:"Gjennomgang av beredskapsplan", desc:"Gjennomgå beredskapsplan med alle ansatte. Sjekk at kontaktlister er oppdatert og at alle vet sin rolle ved hendelser."},
-      {id:"h4", text:"Vernerunde (vinter)", desc:"Gjennomfør vernerunde med fokus på vinterforhold: sklisikring, snørydding, is på tak, strøing, belysning i mørketid."},
-      {id:"h5", text:"Varetelling — hovedtelling", desc:"Gjennomfør årlig hovedtelling av varebeholdning. Bruk gjeldende tellelister og rapporter avvik."},
-      {id:"h6", text:"Kontroll av brannslukkeutstyr", desc:"Kontroller alle brannslukkere, brannslanger og slukkeutstyr. Sjekk utløpsdatoer og tilgjengelighet. Bestill service ved behov."},
-      {id:"h7", text:"Sjekk av nødbelysning og rømningsveier", desc:"Test all nødbelysning. Sjekk at rømningsveier er frie og tydelig merket. Dokumenter i HMS-system."},
-    ]},
-  { id:"t2", name:"Tertial 2", period:"Mai – August", icon:"☀️",
-    focus:"Sommerdrift, vikarer og brannsikkerhet",
-    items:[
-      {id:"h8", text:"HMS-opplæring for sommervikarer", desc:"Alle sommervikarer skal gjennomføre HMS-opplæring FØR selvstendig arbeid. Dokumenter gjennomført opplæring."},
-      {id:"h9", text:"Sommerklargjøring uteareal", desc:"Gjennomgå uteareal for sommerdrift: grøntanlegg, søppelhåndtering, dreneringskontroll, rengjøring av pumpeøyer."},
-      {id:"h10", text:"Brann- og grilltiltak", desc:"Gjennomgå rutiner for propansalg og -oppbevaring. Sikre at brannslukkere er tilgjengelige ved grillsesong. Oppdater skilting."},
-      {id:"h11", text:"Gjennomgang av førstehjelp", desc:"Sjekk at førstehjelpsutstyr er komplett og innenfor dato. Gjennomgå førstehjelpsprosedyrer med ansatte."},
-      {id:"h12", text:"Kjemikaliegjennomgang", desc:"Kontroller oppbevaring av kjemikalier. Sikre at sikkerhetsdatablader er tilgjengelige og oppdatert. Sjekk merking."},
-      {id:"h13", text:"Kontroll av kjøle- og fryseanlegg", desc:"Sjekk at alle kjøl/frys holder korrekt temperatur for sommerdrift. Rengjør kondensatorer. Dokumenter temperaturer."},
-    ]},
-  { id:"t3", name:"Tertial 3", period:"September – Desember", icon:"❄️",
-    focus:"Vinterklargjøring og årsavslutning",
-    items:[
-      {id:"h14", text:"Vinterklargjøring", desc:"Klargjør stasjonen for vinter: bestill salt/sand, sjekk snøfresere/brøyteutstyr, kontroller varmekabler og takrenner."},
-      {id:"h15", text:"Vernerunde (høst)", desc:"Gjennomfør vernerunde med fokus på høst/vinter: belysning, sklisikring, inngangspartier, ventilasjon innendørs."},
-      {id:"h16", text:"Kontroll av varme- og ventilasjonsanlegg", desc:"Service og kontroll av varmeanlegg før vinteren. Sjekk ventilasjon i butikk og lagerrom. Bytt filtre."},
-      {id:"h17", text:"Gjennomgang av HMS-årsrapport", desc:"Oppsummer årets HMS-arbeid: avvik, hendelser, tiltak, vernerunder. Forbered rapport til ledelsen."},
-      {id:"h18", text:"Medarbeidersamtaler med HMS-fokus", desc:"Gjennomfør medarbeidersamtaler med HMS som tema. Kartlegg trivsel, arbeidsmiljø og behov for tiltak."},
-      {id:"h19", text:"Planlegging av neste års HMS-plan", desc:"Lag HMS-plan for kommende år basert på årets erfaringer, risikovurderinger og nye krav."},
-    ]},
+/* ── HMS ÅRSHJUL ── */
+const HMS = [
+  {id:"t1",name:"Tertial 1",period:"Jan–Apr",icon:"📋",focus:"HMS-revisjon og planlegging",items:[
+    {id:"h1",text:"Årlig revisjon av HMS-dokumentasjon",desc:"Gjennomgå og oppdater HMS-system. Sikre gyldige dokumenter."},
+    {id:"h2",text:"Oppdatering av risikovurdering",desc:"Gjennomfør risikovurdering. Vurder nye risikoer, oppdater tiltak."},
+    {id:"h3",text:"Gjennomgang av beredskapsplan",desc:"Gjennomgå med alle ansatte. Oppdater kontaktlister."},
+    {id:"h4",text:"Vernerunde (vinter)",desc:"Fokus: sklisikring, snørydding, is på tak, belysning i mørketid."},
+    {id:"h5",text:"Varetelling — hovedtelling",desc:"Årlig hovedtelling. Bruk gjeldende lister, rapporter avvik."},
+    {id:"h6",text:"Kontroll brannslukkeutstyr",desc:"Sjekk utløpsdatoer og tilgjengelighet. Bestill service ved behov."},
+    {id:"h7",text:"Sjekk nødbelysning og rømningsveier",desc:"Test nødbelysning. Rømningsveier frie og merket."},
+  ]},
+  {id:"t2",name:"Tertial 2",period:"Mai–Aug",icon:"☀️",focus:"Sommerdrift og brannsikkerhet",items:[
+    {id:"h8",text:"HMS-opplæring sommervikarer",desc:"Alle vikarer: HMS-opplæring FØR selvstendig arbeid."},
+    {id:"h9",text:"Sommerklargjøring uteareal",desc:"Grøntanlegg, søppel, drenering, pumpeøyer."},
+    {id:"h10",text:"Brann- og grilltiltak",desc:"Propansalg/-oppbevaring. Brannslukkere ved grillsesong."},
+    {id:"h11",text:"Gjennomgang førstehjelp",desc:"Komplett utstyr, innenfor dato. Gjennomgå prosedyrer."},
+    {id:"h12",text:"Kjemikaliegjennomgang",desc:"Oppbevaring, sikkerhetsdatablader, merking."},
+    {id:"h13",text:"Kontroll kjøle-/fryseanlegg",desc:"Temperaturer for sommerdrift. Rengjør kondensatorer."},
+  ]},
+  {id:"t3",name:"Tertial 3",period:"Sep–Des",icon:"❄️",focus:"Vinterklargjøring og årsavslutning",items:[
+    {id:"h14",text:"Vinterklargjøring",desc:"Salt/sand, snøfresere, varmekabler, takrenner."},
+    {id:"h15",text:"Vernerunde (høst)",desc:"Belysning, sklisikring, inngangspartier, ventilasjon."},
+    {id:"h16",text:"Kontroll varme-/ventilasjon",desc:"Service varmeanlegg. Sjekk ventilasjon, bytt filtre."},
+    {id:"h17",text:"HMS-årsrapport",desc:"Oppsummer avvik, hendelser, tiltak. Rapport til ledelsen."},
+    {id:"h18",text:"Medarbeidersamtaler (HMS)",desc:"Trivsel, arbeidsmiljø, behov for tiltak."},
+    {id:"h19",text:"Plan neste års HMS",desc:"Basert på erfaringer, risikovurderinger og nye krav."},
+  ]},
 ];
+const curT = () => {const m=new Date().getMonth()+1;return m<=4?"t1":m<=8?"t2":"t3";};
 
-const currentTertial = () => { const m = new Date().getMonth()+1; return m<=4?"t1":m<=8?"t2":"t3"; };
-const HMS_KEY = "yx_kfk_hms";
-
-/* ── STORAGE: separate keys for self-eval and RS visits ── */
-const KEYS = { sl: "yx_kfk_sl", rs: "yx_kfk_rs" };
-const load = (role) => { try { return JSON.parse(localStorage.getItem(KEYS[role]||KEYS.rs)||"[]"); } catch { return []; } };
-const save = (role, v) => localStorage.setItem(KEYS[role]||KEYS.rs, JSON.stringify(v));
-const loadAll = () => [...load("sl"), ...load("rs")].sort((a,b) => b.id - a.id);
-
+/* ── STORAGE ── */
+const KEYS={sl:"yx_kfk_sl",rs:"yx_kfk_rs",hms:"yx_kfk_hms"};
+const ld = r => {try{return JSON.parse(localStorage.getItem(KEYS[r]||KEYS.rs)||"[]");}catch{return[];}};
+const sv = (r,v) => localStorage.setItem(KEYS[r]||KEYS.rs,JSON.stringify(v));
+const ldAll = () => [...ld("sl"),...ld("rs")].sort((a,b)=>b.id-a.id);
+const ldHms = () => {try{return JSON.parse(localStorage.getItem(KEYS.hms)||"{}");}catch{return{};}};
+const svHms = h => localStorage.setItem(KEYS.hms,JSON.stringify(h));
 const sc = p => p>=85?"#16a34a":p>=70?"#84cc16":p>=55?"#eab308":p>=40?"#f97316":"#dc2626";
-const sl = p => p>=85?"Utmerket":p>=70?"Godt":p>=55?"OK":p>=40?"Trenger oppfølging":"Kritisk";
+const sl2 = p => p>=85?"Utmerket":p>=70?"Godt":p>=55?"OK":p>=40?"Trenger oppfølging":"Kritisk";
 
 function App() {
-  const [view, setView] = useState("splash");
-  const [role, setRole] = useState(null);
-  const [station, setStation] = useState(null);
-  const [catIdx, setCatIdx] = useState(0);
-  const [scores, setScores] = useState({});
-  const [notes, setNotes] = useState({});
-  const [photos, setPhotos] = useState({});
-  const [audio, setAudio] = useState({});
-  const [visitNote, setVisitNote] = useState("");
-  const [showCampaign, setShowCampaign] = useState(false);
-  const [hmsChecks, setHmsChecks] = useState(() => { try { return JSON.parse(localStorage.getItem(HMS_KEY)||"{}"); } catch { return {}; } });
+  const [view,setView]=useState("splash");
+  const [role,setRole]=useState(null);
+  const [station,setStation]=useState(null);
+  const [catIdx,setCatIdx]=useState(0);
+  const [scores,setScores]=useState({});
+  const [na,setNa]=useState({});
+  const [notes,setNotes]=useState({});
+  const [photos,setPhotos]=useState({});
+  const [visitNote,setVisitNote]=useState("");
+  const [showCamp,setShowCamp]=useState(false);
+  const [hms,setHms]=useState(ldHms);
+  const [showImg,setShowImg]=useState(null);
 
-  const saveHms = (stId, itemId, val) => {
-    const k = `${stId}_${itemId}`;
-    const next = {...hmsChecks, [k]: val};
-    setHmsChecks(next);
-    localStorage.setItem(HMS_KEY, JSON.stringify(next));
-  };
-  const getHms = (stId, itemId) => hmsChecks[`${stId}_${itemId}`];
+  const slV=ld("sl"),rsV=ld("rs");
+  useEffect(()=>{const t=setTimeout(()=>view==="splash"&&setView("roles"),1800);return()=>clearTimeout(t);},[]);
 
-  // Load visits for current role
-  const allVisits = loadAll();
-  const slVisits = load("sl");
-  const rsVisits = load("rs");
-
-  useEffect(() => { const t = setTimeout(() => view==="splash" && setView("roles"), 1800); return () => clearTimeout(t); }, []);
-
-  const totalScore = Object.values(scores).reduce((s,v) => s+(v||0), 0);
-  const totalPct = Math.round(totalScore / MAX_TOTAL * 100);
-  const photoCount = Object.values(photos).reduce((s,a) => s+(a?.length||0), 0);
-
-  // Get latest self-evaluation for a station
-  const getSelfEval = (stationId) => slVisits.find(v => v.stationId === stationId);
+  // Score calculation excluding N/A items
+  const activeMax = RFC.reduce((s,c)=>s+c.items.filter(i=>!na[i.id]).reduce((a,b)=>a+b.max,0),0);
+  const totalScore = Object.entries(scores).filter(([k])=>!na[k]).reduce((s,[,v])=>s+(v||0),0);
+  const totalPct = activeMax>0?Math.round(totalScore/activeMax*100):0;
+  const photoCount = Object.values(photos).reduce((s,a)=>s+(a?.length||0),0);
+  const getSE = sid => slV.find(v=>v.stationId===sid);
 
   const submit = () => {
-    const visit = {id:Date.now(),stationId:station.id,stationName:station.name,role,date:new Date().toISOString(),
-      scores:{...scores},notes:{...notes},visitNote,photoCount,
-      total:totalScore,max:MAX_TOTAL,pct:totalPct};
-    const current = load(role);
-    const u = [visit,...current]; save(role, u);
-    setScores({}); setNotes({}); setPhotos({}); setAudio({}); setVisitNote(""); setCatIdx(0); setView("done");
+    const visit={id:Date.now(),stationId:station.id,stationName:station.name,role,date:new Date().toISOString(),scores:{...scores},na:{...na},notes:{...notes},visitNote,photoCount,total:totalScore,max:activeMax,pct:totalPct};
+    const cur=ld(role); sv(role,[visit,...cur]);
+    setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setView("done");
   };
 
-  /* ── SPLASH ── */
-  if (view==="splash") return (
+  const hmsSet=(sId,hId,val)=>{const k=`${sId}_${hId}`;const n={...hms,[k]:val};setHms(n);svHms(n);};
+  const hmsGet=(sId,hId)=>hms[`${sId}_${hId}`];
+
+  /* SPLASH */
+  if(view==="splash")return(
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:YX_DARK}}>
-      <img src={LOGO_W} alt="YX" style={{height:90,marginBottom:16}} />
+      <img src={LOGO_W} alt="YX" style={{height:90,marginBottom:16}}/>
       <div style={{color:YX_RED,fontSize:14,fontWeight:700,letterSpacing:3,textTransform:"uppercase"}}>Klar for Kunde</div>
       <div style={{color:"#8899aa",fontSize:12,marginTop:6,fontStyle:"italic"}}>Din stasjon.</div>
     </div>
   );
 
-  /* ── ROLES ── */
-  if (view==="roles") return (
+  /* ROLES */
+  if(view==="roles")return(
     <div style={{padding:"48px 24px",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
-      <img src={LOGO_C} alt="YX" style={{height:56,alignSelf:"flex-start",marginBottom:8}} />
+      <img src={LOGO_C} alt="YX" style={{height:56,alignSelf:"flex-start",marginBottom:8}}/>
       <h1 style={{fontSize:24,fontWeight:800,margin:"6px 0 4px",color:YX_DARK}}>Klar for Kunde</h1>
-      <p style={{fontSize:14,color:"#777",marginBottom:36}}>RFC — stasjonsbesøk og selvevaluering</p>
+      <p style={{fontSize:14,color:"#777",marginBottom:36}}>Kundereisen — stasjonsbesøk og selvevaluering</p>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
-        {[{k:"sl",e:"🏪",n:"Stasjonsleder",d:"Selvevaluering — forbered besøket"},{k:"rs",e:"📋",n:"Regionssjef",d:"Coaching-besøk — se stasjonens egenvurdering"},{k:"leder",e:"📊",n:"Lederdashboard",d:"Oversikt, gap-analyse og historikk"}].map(r=>(
+        {[{k:"sl",e:"🏪",n:"Stasjonsleder",d:"Selvevaluering — forbered besøket"},{k:"rs",e:"📋",n:"Regionssjef",d:"Coaching-besøk — se stasjonens vurdering"},{k:"leder",e:"📊",n:"Lederdashboard",d:"Oversikt, gap-analyse og historikk"}].map(r=>(
           <button key={r.k} onClick={()=>{setRole(r.k);setView(r.k==="leder"?"dash":"home");}} style={{background:"#fff",border:"2px solid #eae7df",borderRadius:16,padding:"22px 20px",textAlign:"left",display:"flex",alignItems:"center",gap:16}}>
             <span style={{fontSize:32}}>{r.e}</span>
             <div><div style={{fontWeight:700,fontSize:17,color:YX_DARK}}>{r.n}</div><div style={{fontSize:13,color:"#888",marginTop:2}}>{r.d}</div></div>
           </button>
         ))}
       </div>
-      <div style={{marginTop:"auto",paddingTop:40,fontSize:11,color:"#bbb",textAlign:"center"}}>YX Norge AS · v5</div>
+      <div style={{marginTop:"auto",paddingTop:40,fontSize:11,color:"#bbb",textAlign:"center"}}>YX Norge AS · v7</div>
     </div>
   );
 
-  /* ── HOME ── */
-  if (view==="home") return (
+  /* HOME */
+  if(view==="home")return(
     <div style={{padding:"20px 20px 40px"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
-        <button onClick={()=>setView("roles")} style={{fontSize:15,color:"#666",padding:"6px 0"}}>← Tilbake</button>
+        <button onClick={()=>setView("roles")} style={{fontSize:15,color:"#666"}}>← Tilbake</button>
         <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:YX_RED}}>{role==="rs"?"Regionssjef":"Stasjonsleder"}</div>
       </div>
-      <h2 style={{fontSize:20,fontWeight:800,margin:"20px 0 4px",color:YX_DARK}}>Velg stasjon</h2>
-      {role==="rs"&&<p style={{fontSize:12,color:"#888",marginBottom:12}}>Stasjonslederens egenvurdering vises under inspeksjonen</p>}
-      {role==="sl"&&<p style={{fontSize:12,color:"#888",marginBottom:12}}>Fyll ut egenvurdering før regionsjefens besøk</p>}
-
-      {/* HMS Årshjul button */}
-      <button onClick={()=>setView("hms")} style={{width:"100%",background:"#fff",border:"2px solid #0C2340",borderRadius:12,padding:"14px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
-        <span style={{fontSize:28}}>⚠️</span>
-        <div>
-          <div style={{fontWeight:700,fontSize:15,color:YX_DARK}}>HMS Årshjul</div>
-          <div style={{fontSize:12,color:"#888",marginTop:1}}>Gjeldende: {HMS_TERTIALS.find(t=>t.id===currentTertial())?.name} ({HMS_TERTIALS.find(t=>t.id===currentTertial())?.period})</div>
-        </div>
+      <button onClick={()=>setView("hms")} style={{width:"100%",background:"#fff",border:"2px solid "+YX_DARK,borderRadius:12,padding:"12px 16px",margin:"16px 0",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+        <span style={{fontSize:24}}>⚠️</span>
+        <div><div style={{fontWeight:700,fontSize:14,color:YX_DARK}}>HMS Årshjul</div><div style={{fontSize:11,color:"#888"}}>{HMS.find(t=>t.id===curT())?.name} ({HMS.find(t=>t.id===curT())?.period})</div></div>
       </button>
+      <h2 style={{fontSize:20,fontWeight:800,margin:"8px 0 4px",color:YX_DARK}}>Velg stasjon</h2>
+      <p style={{fontSize:12,color:"#888",marginBottom:12}}>{role==="rs"?"Stasjonens egenvurdering vises under besøket":"Fyll ut før regionsjefens besøk"}</p>
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {STATIONS.map(s=>{
-          const myVisits = (role==="rs"?rsVisits:slVisits).filter(v=>v.stationId===s.id);
-          const last = myVisits[0];
-          const selfEval = getSelfEval(s.id);
-          return (
-            <button key={s.id} onClick={()=>{setStation(s);setView("audit");}} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px 16px",textAlign:"left"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div style={{fontWeight:600,fontSize:15,color:YX_DARK}}>{s.name}</div>
-                {last&&<div style={{background:sc(last.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:12,fontWeight:700}}>{last.pct}%</div>}
-              </div>
-              <div style={{display:"flex",gap:8,marginTop:4,fontSize:11,color:"#999"}}>
-                {last&&<span>Sist: {new Date(last.date).toLocaleDateString("nb-NO")}</span>}
-                {role==="rs"&&selfEval&&<span style={{color:"#0B326B"}}>📋 Egenvurdering: {selfEval.pct}%</span>}
-                {role==="rs"&&!selfEval&&<span style={{color:"#ccc"}}>Ingen egenvurdering</span>}
-              </div>
-            </button>
-          );
-        })}
+        {STATIONS.map(s=>{const myV=(role==="rs"?rsV:slV).filter(v=>v.stationId===s.id);const last=myV[0];const se=getSE(s.id);return(
+          <button key={s.id} onClick={()=>{setStation(s);setView("audit");}} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px 16px",textAlign:"left"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontWeight:600,fontSize:15,color:YX_DARK}}>{s.name}</div>
+              {last&&<div style={{background:sc(last.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:12,fontWeight:700}}>{last.pct}%</div>}
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:4,fontSize:11,color:"#999"}}>
+              {last&&<span>Sist: {new Date(last.date).toLocaleDateString("nb-NO")}</span>}
+              {role==="rs"&&se&&<span style={{color:"#0B326B"}}>📋 Egenvurdering: {se.pct}%</span>}
+            </div>
+          </button>
+        );})}
       </div>
     </div>
   );
 
-  /* ── AUDIT ── */
-  if (view==="audit"&&station) {
-    const cat=RFC[catIdx], catMax=cat.items.reduce((s,i)=>s+i.max,0), catScore=cat.items.reduce((s,i)=>s+(scores[i.id]||0),0);
-    const isLast = catIdx===RFC.length-1;
-    const selfEval = role==="rs" ? getSelfEval(station.id) : null;
+  /* AUDIT */
+  if(view==="audit"&&station){
+    const cat=RFC[catIdx];
+    const catItems=cat.items.filter(i=>!na[i.id]);
+    const catMax=catItems.reduce((s,i)=>s+i.max,0);
+    const catScore=catItems.reduce((s,i)=>s+(scores[i.id]||0),0);
+    const isLast=catIdx===RFC.length-1;
+    const se=role==="rs"?getSE(station.id):null;
 
-    return (
+    return(
       <div style={{paddingBottom:120}}>
         <div style={{background:YX_DARK,color:"#fff",padding:"14px 18px",position:"sticky",top:0,zIndex:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
             <button onClick={()=>setView("home")} style={{color:"#aaa",fontSize:13}}>← Avbryt</button>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              {photoCount>0&&<span style={{fontSize:11,color:"#7799bb"}}>📷{photoCount}</span>}
-              <span style={{fontSize:11,color:"#7799bb"}}>{catIdx+1}/{RFC.length}</span>
-            </div>
+            <span style={{fontSize:11,color:"#7799bb"}}>{catIdx+1}/{RFC.length}</span>
           </div>
-          <div style={{fontSize:19,fontWeight:800}}>{cat.icon} {cat.name}</div>
-          <div style={{fontSize:12,color:"#8899aa",marginTop:4}}>{cat.intro}</div>
-          <div style={{height:4,background:"#1a3050",borderRadius:2,marginTop:10,overflow:"hidden"}}>
+          <div style={{fontSize:18,fontWeight:800}}>{cat.icon} {cat.name}</div>
+          <div style={{fontSize:12,color:"#8899aa",marginTop:3}}>{cat.intro}</div>
+          <div style={{height:4,background:"#1a3050",borderRadius:2,marginTop:8,overflow:"hidden"}}>
             <div style={{height:"100%",background:YX_RED,width:`${(catIdx+1)/RFC.length*100}%`,transition:"width .3s"}}/>
           </div>
         </div>
 
-        {/* Campaign reference for Butikk category */}
-        {cat.campaign && (
-          <div style={{margin:"12px 16px 0",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 12px"}}>
-            <button onClick={()=>setShowCampaign(!showCampaign)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        {/* Customer journey reference image */}
+        {cat.img&&(
+          <button onClick={()=>setShowImg(showImg===cat.id?null:cat.id)} style={{width:"100%",padding:"8px 16px 0",textAlign:"left"}}>
+            <div style={{fontSize:11,color:"#888",marginBottom:4}}>{showImg===cat.id?"▲ Skjul referansebilde":"▼ Vis hvordan det skal se ut (kundereisen)"}</div>
+          </button>
+        )}
+        {showImg===cat.id&&cat.img&&<div style={{padding:"0 16px 8px"}}><img src={cat.img} style={{width:"100%",borderRadius:8,border:"1px solid #eae7df"}} alt="Referanse"/></div>}
+
+        {/* Campaign */}
+        {cat.campaign&&(
+          <div style={{margin:"8px 16px 0",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 12px"}}>
+            <button onClick={()=>setShowCamp(!showCamp)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>📢 {CAMPAIGN.period}</span>
-              <span style={{fontSize:12,color:"#b45309"}}>{showCampaign?"▲ Skjul":"▼ Vis kampanjer"}</span>
+              <span style={{fontSize:12,color:"#b45309"}}>{showCamp?"▲":"▼ Vis kampanjer"}</span>
             </button>
-            {showCampaign&&(
-              <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
-                {CAMPAIGN.items.map((c,i)=>(
-                  <div key={i} style={{fontSize:12,padding:"6px 0",borderTop:i?"1px solid #fef3c7":"none"}}>
-                    <div style={{display:"flex",justifyContent:"space-between"}}>
-                      <span style={{fontWeight:600,color:"#78350f"}}>{c.name}</span>
-                      {c.price&&<span style={{fontWeight:700,color:"#dc2626"}}>{c.price}</span>}
-                    </div>
-                    <div style={{color:"#92400e",fontSize:11}}>📍 {c.placement}</div>
-                    {c.note&&<div style={{color:"#a16207",fontSize:10,marginTop:2}}>{c.note}</div>}
-                  </div>
-                ))}
-              </div>
-            )}
+            {showCamp&&<div style={{marginTop:6}}>{CAMPAIGN.items.map((c,i)=>(<div key={i} style={{fontSize:11,padding:"4px 0",borderTop:i?"1px solid #fef3c7":"none",display:"flex",justifyContent:"space-between"}}><span style={{fontWeight:600,color:"#78350f"}}>{c.name}</span><span style={{fontWeight:700,color:"#dc2626"}}>{c.price}</span></div>))}</div>}
           </div>
         )}
 
         <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
           {cat.items.map(item=>{
-            const val = scores[item.id] ?? null;
-            const labels = LABELS[item.max]||LABELS[5];
-            const selfScore = selfEval?.scores?.[item.id];
-            const selfLabel = selfScore!==undefined ? labelFor(item.max, selfScore) : null;
-            const myLabel = val!==null ? labelFor(item.max, val) : null;
-            const hasGap = role==="rs" && selfLabel && myLabel && selfLabel.v !== myLabel.v;
+            const val=scores[item.id]??null;
+            const isNa=na[item.id];
+            const opts=scoreOpts(item.max);
+            const seScore=se?.scores?.[item.id];
+            const seNa=se?.na?.[item.id];
+            const seLabel=seScore!==undefined&&!seNa?labelFor(item.max,seScore):null;
+            const myLabel=val!==null&&!isNa?labelFor(item.max,val):null;
+            const hasGap=role==="rs"&&seLabel&&myLabel&&seLabel.c!==myLabel.c;
 
-            return (
-              <div key={item.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"12px"}}>
+            return(
+              <div key={item.id} style={{background:isNa?"#f9f9f6":"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"12px",opacity:isNa?.5:1}}>
                 <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:YX_DARK,lineHeight:1.35}}>{item.text}</div>
 
-                {/* Self-evaluation reference for RS */}
-                {role==="rs"&&selfLabel&&(
+                {role==="rs"&&seLabel&&!isNa&&(
                   <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,padding:"5px 8px",background:"#f0f7ff",borderRadius:6}}>
                     <span style={{fontSize:11,color:"#555"}}>Stasjonens vurdering:</span>
-                    <span className="gap-badge" style={{background:selfLabel.c+"22",color:selfLabel.c}}>{selfLabel.l}</span>
-                  </div>
-                )}
-                {role==="rs"&&!selfLabel&&selfEval&&(
-                  <div style={{fontSize:10,color:"#bbb",marginBottom:6,fontStyle:"italic"}}>Ikke vurdert av stasjonen</div>
-                )}
-
-                {/* Score buttons */}
-                <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
-                  {labels.map(lb=>(
-                    <button key={lb.v} onClick={()=>setScores(s=>({...s,[item.id]:lb.v}))}
-                      style={{flex:"1 1 0",minWidth:0,padding:"7px 3px",borderRadius:7,
-                        background:val===lb.v?lb.c:"#f5f3ee",color:val===lb.v?"#fff":"#777",
-                        fontSize:10,fontWeight:700,lineHeight:1.2,textAlign:"center",
-                        border:val===lb.v?"none":"1px solid #eae7df"}}>
-                      {lb.l}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Gap indicator */}
-                {hasGap&&(
-                  <div style={{fontSize:11,padding:"4px 8px",borderRadius:4,marginBottom:6,
-                    background: myLabel.v < selfLabel.v ? "#fef2f2" : "#f0fdf4",
-                    color: myLabel.v < selfLabel.v ? "#991b1b" : "#166534"}}>
-                    {myLabel.v < selfLabel.v
-                      ? `⚠️ Gap: stasjonen sier "${selfLabel.l}", du sier "${myLabel.l}"`
-                      : `✅ Du vurderer høyere enn stasjonen`}
+                    <span style={{background:seLabel.c+"22",color:seLabel.c,padding:"2px 7px",borderRadius:4,fontSize:10,fontWeight:700}}>{seLabel.l}</span>
                   </div>
                 )}
 
-                {/* Coaching talking point */}
-                {role==="rs"&&<div style={{background:"#fef5f5",borderLeft:`3px solid ${YX_RED}`,padding:"6px 8px",borderRadius:4,fontSize:11,color:"#555",marginBottom:4}}>💬 {item.talk}</div>}
+                {!isNa&&(
+                  <div style={{display:"flex",gap:5,marginBottom:6}}>
+                    {opts.map(o=>(
+                      <button key={o.v} onClick={()=>setScores(s=>({...s,[item.id]:o.v}))}
+                        style={{flex:1,padding:"9px 4px",borderRadius:8,background:val===o.v?o.c:"#f5f3ee",color:val===o.v?"#fff":"#777",fontSize:11,fontWeight:700,textAlign:"center",border:val===o.v?"none":"1px solid #eae7df"}}>{o.l}</button>
+                    ))}
+                  </div>
+                )}
 
-                {/* Notes + audio */}
-                <div style={{display:"flex",alignItems:"flex-start",gap:4,marginTop:4}}>
-                  <textarea placeholder="Notat" value={notes[item.id]||""} onChange={e=>setNotes(n=>({...n,[item.id]:e.target.value}))}
-                    style={{flex:1,minHeight:32,border:"1px solid #f0ede5",borderRadius:6,padding:"6px 8px",fontSize:12,color:"#444",background:"#fafaf7"}}/>
-                  <AudioBtn clip={audio[item.id]} onRecord={d=>setAudio(a=>({...a,[item.id]:d}))} onDelete={()=>setAudio(a=>({...a,[item.id]:null}))}/>
-                </div>
+                <button onClick={()=>{setNa(n=>({...n,[item.id]:!isNa}));if(!isNa)setScores(s=>{const n={...s};delete n[item.id];return n;});}}
+                  style={{fontSize:10,color:isNa?YX_RED:"#bbb",fontWeight:600,marginBottom:4,padding:"3px 0"}}>{isNa?"↩ Gjør aktuell":"Ikke aktuell"}</button>
 
-                {/* Photos */}
-                <PhotoCapture photos={photos[item.id]||[]} onAdd={d=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),d]}))} onRemove={idx=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}/>
+                {hasGap&&!isNa&&(
+                  <div style={{fontSize:11,padding:"4px 8px",borderRadius:4,marginBottom:4,background:myLabel.c==="#dc2626"?"#fef2f2":"#f0fdf4",color:myLabel.c==="#dc2626"?"#991b1b":"#166534"}}>
+                    ⚠️ Gap: stasjonen sier «{seLabel.l}», du sier «{myLabel.l}»
+                  </div>
+                )}
+
+                {role==="rs"&&!isNa&&<div style={{background:"#fef5f5",borderLeft:`3px solid ${YX_RED}`,padding:"6px 8px",borderRadius:4,fontSize:11,color:"#555",marginBottom:4}}>💬 {item.talk}</div>}
+
+                {!isNa&&(
+                  <div style={{display:"flex",alignItems:"flex-start",gap:4,marginTop:4}}>
+                    <textarea placeholder="Notat" value={notes[item.id]||""} onChange={e=>setNotes(n=>({...n,[item.id]:e.target.value}))}
+                      style={{flex:1,minHeight:32,border:"1px solid #f0ede5",borderRadius:6,padding:"6px 8px",fontSize:12,color:"#444",background:"#fafaf7"}}/>
+                    <SpeechBtn onText={t=>setNotes(n=>({...n,[item.id]:(n[item.id]||"")+(n[item.id]?" ":"")+t}))}/>
+                  </div>
+                )}
+                {!isNa&&<PhotoCapture photos={photos[item.id]||[]} onAdd={d=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),d]}))} onRemove={idx=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}/>}
               </div>
             );
           })}
-
           {isLast&&(
-            <div style={{background:"#fff",border:"2px solid #eae7df",borderRadius:12,padding:"12px",marginTop:6}}>
+            <div style={{background:"#fff",border:"2px solid #eae7df",borderRadius:12,padding:"12px",marginTop:4}}>
               <div style={{fontSize:13,fontWeight:700,color:YX_DARK,marginBottom:6}}>📝 Oppsummering</div>
-              <textarea placeholder="Avtaler, oppfølgingspunkter, observasjoner..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
-                style={{width:"100%",minHeight:70,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:12,color:"#444",background:"#fafaf7"}}/>
+              <div style={{display:"flex",gap:4}}>
+                <textarea placeholder="Avtaler, oppfølging, observasjoner..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
+                  style={{flex:1,minHeight:70,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:12,color:"#444",background:"#fafaf7"}}/>
+                <SpeechBtn onText={t=>setVisitNote(v=>(v?v+" ":"")+t)}/>
+              </div>
             </div>
           )}
         </div>
-
         <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",padding:"10px 16px",maxWidth:480,margin:"0 auto"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,fontSize:12,color:"#666"}}>
             <span>{catScore}/{catMax}</span>
-            {selfEval&&role==="rs"&&<span style={{color:"#0B326B"}}>Stasjon: {selfEval.pct}%</span>}
-            <span style={{fontWeight:700}}>Din: {totalScore}/{MAX_TOTAL} ({totalPct}%)</span>
+            {se&&role==="rs"&&<span style={{color:"#0B326B"}}>Stasjon: {se.pct}%</span>}
+            <span style={{fontWeight:700}}>{totalScore}/{activeMax} ({totalPct}%)</span>
           </div>
           <div style={{display:"flex",gap:8}}>
             {catIdx>0&&<button onClick={()=>setCatIdx(i=>i-1)} style={{flex:1,padding:"13px",background:"#f5f3ee",borderRadius:10,fontWeight:600,color:"#444",fontSize:14}}>←</button>}
@@ -464,166 +407,90 @@ function App() {
     );
   }
 
-  /* ── DONE ── */
-  if (view==="done") {
-    const myVisits = role==="rs"?load("rs"):load("sl");
-    const v = myVisits[0];
-    if(!v) return null;
-    const selfEval = role==="rs" ? getSelfEval(v.stationId) : null;
-    return (
-      <div style={{padding:"60px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
-        <div style={{width:80,height:80,borderRadius:40,background:sc(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,marginBottom:16}}>✓</div>
-        <div style={{fontSize:12,color:"#888",letterSpacing:1,textTransform:"uppercase"}}>{role==="rs"?"Coaching-besøk registrert":"Selvevaluering registrert"}</div>
-        <div style={{fontSize:22,fontWeight:800,marginTop:6,color:YX_DARK}}>{v.stationName}</div>
-        <div style={{fontSize:56,fontWeight:900,color:sc(v.pct),marginTop:16,lineHeight:1}}>{v.pct}%</div>
-        <div style={{fontSize:14,color:"#666",marginTop:4}}>{sl(v.pct)}</div>
+  /* DONE */
+  if(view==="done"){const myV=ld(role);const v=myV[0];if(!v)return null;const se=role==="rs"?getSE(v.stationId):null;return(
+    <div style={{padding:"60px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
+      <div style={{width:80,height:80,borderRadius:40,background:sc(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,marginBottom:16}}>✓</div>
+      <div style={{fontSize:12,color:"#888",letterSpacing:1,textTransform:"uppercase"}}>{role==="rs"?"Coaching-besøk":"Selvevaluering"} registrert</div>
+      <div style={{fontSize:22,fontWeight:800,marginTop:6,color:YX_DARK}}>{v.stationName}</div>
+      <div style={{fontSize:56,fontWeight:900,color:sc(v.pct),marginTop:16,lineHeight:1}}>{v.pct}%</div>
+      <div style={{fontSize:14,color:"#666",marginTop:4}}>{sl2(v.pct)}</div>
+      {se&&role==="rs"&&(
+        <div style={{marginTop:14,padding:"10px 20px",background:"#f0f7ff",borderRadius:10,fontSize:13}}>
+          <div style={{color:"#555"}}>Stasjonens egenvurdering: <b style={{color:"#0B326B"}}>{se.pct}%</b></div>
+          <div style={{fontSize:11,color:"#888",marginTop:4}}>Gap: {Math.abs(v.pct-se.pct)}pp {v.pct<se.pct?"— du vurderer strengere":v.pct>se.pct?"— du vurderer mildere":"— enige!"}</div>
+        </div>
+      )}
+      <button onClick={()=>setView("home")} style={{marginTop:32,padding:"13px 28px",background:YX_DARK,color:"#fff",borderRadius:10,fontWeight:700,fontSize:14}}>Tilbake</button>
+    </div>
+  );}
 
-        {role==="rs"&&selfEval&&(
-          <div style={{marginTop:16,padding:"12px 20px",background:"#f0f7ff",borderRadius:10,fontSize:13}}>
-            <div style={{color:"#555"}}>Stasjonens egenvurdering</div>
-            <div style={{fontSize:28,fontWeight:800,color:"#0B326B",marginTop:4}}>{selfEval.pct}%</div>
-            <div style={{fontSize:11,color:"#888",marginTop:4}}>
-              Gap: {Math.abs(v.pct - selfEval.pct)} prosentpoeng
-              {v.pct < selfEval.pct ? " — du vurderer strengere" : v.pct > selfEval.pct ? " — du vurderer mildere" : " — enige!"}
+  /* DASHBOARD */
+  if(view==="dash"){const all=ldAll();const bs=STATIONS.map(s=>{const sl=slV.filter(v=>v.stationId===s.id);const rs=rsV.filter(v=>v.stationId===s.id);return{...s,slL:sl[0],rsL:rs[0],tot:sl.length+rs.length};}).sort((a,b)=>(a.rsL?.pct??a.slL?.pct??999)-(b.rsL?.pct??b.slL?.pct??999));return(
+    <div style={{padding:"20px 20px 40px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
+        <button onClick={()=>setView("roles")} style={{fontSize:15,color:"#666"}}>← Tilbake</button>
+        <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:YX_RED}}>Lederdashboard</div>
+      </div>
+      <div style={{display:"flex",gap:8,margin:"20px 0"}}>
+        {[["Besøk",all.length],["Stasjoner",new Set(all.map(v=>v.stationId)).size],["Snitt",all.length?Math.round(all.reduce((s,v)=>s+v.pct,0)/all.length)+"%":"—"]].map(([l,v],i)=>(
+          <div key={i} style={{flex:1,background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px",textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:YX_DARK}}>{v}</div><div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{l}</div></div>
+        ))}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {bs.map(s=>(<div key={s.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 12px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:14,fontWeight:600,color:YX_DARK}}>{s.name}</div>
+            <div style={{display:"flex",gap:4}}>
+              {s.slL&&<div style={{background:"#e0f2fe",color:"#0369a1",padding:"3px 7px",borderRadius:5,fontSize:11,fontWeight:700}}>🏪{s.slL.pct}%</div>}
+              {s.rsL&&<div style={{background:sc(s.rsL.pct),color:"#fff",padding:"3px 7px",borderRadius:5,fontSize:11,fontWeight:700}}>📋{s.rsL.pct}%</div>}
             </div>
           </div>
-        )}
-
-        {v.photoCount>0&&<div style={{fontSize:12,color:"#999",marginTop:10}}>📷 {v.photoCount} bilder</div>}
-        <button onClick={()=>setView("home")} style={{marginTop:32,padding:"13px 28px",background:YX_DARK,color:"#fff",borderRadius:10,fontWeight:700,fontSize:14}}>Tilbake</button>
+          <div style={{fontSize:10,color:"#999",marginTop:2}}>{s.tot} besøk{s.slL&&s.rsL?` · Gap: ${Math.abs(s.slL.pct-s.rsL.pct)}pp`:""}</div>
+        </div>))}
       </div>
-    );
-  }
+    </div>
+  );}
 
-  /* ── DASHBOARD ── */
-  if (view==="dash") {
-    const all = loadAll();
-    const bs = STATIONS.map(s=>{
-      const slV = slVisits.filter(v=>v.stationId===s.id);
-      const rsV = rsVisits.filter(v=>v.stationId===s.id);
-      return {...s, slLast:slV[0], rsLast:rsV[0], totalVisits:slV.length+rsV.length};
-    }).sort((a,b)=>{
-      const aP = a.rsLast?.pct ?? a.slLast?.pct ?? 999;
-      const bP = b.rsLast?.pct ?? b.slLast?.pct ?? 999;
-      return aP - bP;
-    });
-
-    return (
-      <div style={{padding:"20px 20px 40px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
-          <button onClick={()=>setView("roles")} style={{fontSize:15,color:"#666",padding:"6px 0"}}>← Tilbake</button>
-          <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:YX_RED}}>Lederdashboard</div>
-        </div>
-        <div style={{display:"flex",gap:8,margin:"20px 0"}}>
-          {[["Besøk",all.length],["Stasjoner",new Set(all.map(v=>v.stationId)).size],["Snitt",all.length?Math.round(all.reduce((s,v)=>s+v.pct,0)/all.length)+"%":"—"]].map(([l,v],i)=>(
-            <div key={i} style={{flex:1,background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
-              <div style={{fontSize:22,fontWeight:800,color:YX_DARK}}>{v}</div>
-              <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{l}</div>
-            </div>
-          ))}
-        </div>
-        <h3 style={{fontSize:13,fontWeight:700,margin:"16px 0 8px",color:YX_DARK,textTransform:"uppercase",letterSpacing:1}}>Stasjoner</h3>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {bs.map(s=>(
-            <div key={s.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 12px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div style={{fontSize:14,fontWeight:600,color:YX_DARK}}>{s.name}</div>
-                <div style={{display:"flex",gap:4}}>
-                  {s.slLast&&<div style={{background:"#e0f2fe",color:"#0369a1",padding:"3px 7px",borderRadius:5,fontSize:11,fontWeight:700}} title="Egenvurdering">🏪{s.slLast.pct}%</div>}
-                  {s.rsLast&&<div style={{background:sc(s.rsLast.pct),color:"#fff",padding:"3px 7px",borderRadius:5,fontSize:11,fontWeight:700}} title="Regionssjef">📋{s.rsLast.pct}%</div>}
+  /* HMS */
+  if(view==="hms"){const ct=curT();return(
+    <div style={{padding:"20px 20px 40px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
+        <button onClick={()=>setView("home")} style={{fontSize:15,color:"#666"}}>← Tilbake</button>
+        <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:YX_DARK}}>HMS Årshjul</div>
+      </div>
+      {!station?(<div style={{marginTop:20}}><h2 style={{fontSize:18,fontWeight:800,color:YX_DARK,marginBottom:12}}>Velg stasjon</h2>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>{STATIONS.map(s=>(<button key={s.id} onClick={()=>setStation(s)} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"12px",textAlign:"left",fontWeight:600,color:YX_DARK}}>{s.name}</button>))}</div></div>
+      ):(
+        <div style={{marginTop:16}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div><h2 style={{fontSize:18,fontWeight:800,color:YX_DARK}}>{station.name}</h2><p style={{fontSize:12,color:"#888"}}>HMS {new Date().getFullYear()}</p></div>
+            <button onClick={()=>setStation(null)} style={{fontSize:12,color:"#666",textDecoration:"underline"}}>Bytt</button>
+          </div>
+          {HMS.map(t=>{const ic=t.id===ct;const ck=t.items.filter(i=>hmsGet(station.id,i.id)).length;return(
+            <div key={t.id} style={{marginBottom:14,border:ic?`2px solid ${YX_RED}`:"1px solid #eae7df",borderRadius:12,overflow:"hidden",background:"#fff"}}>
+              <div style={{padding:"10px 14px",background:ic?"#CF122D10":"#fafaf7",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div><div style={{fontSize:14,fontWeight:700,color:YX_DARK}}>{t.icon} {t.name} {ic&&<span style={{fontSize:10,fontWeight:800,color:YX_RED,background:"#CF122D15",padding:"2px 6px",borderRadius:4,marginLeft:6}}>NÅ</span>}</div><div style={{fontSize:11,color:"#888"}}>{t.period} — {t.focus}</div></div>
+                <div style={{fontSize:13,fontWeight:800,color:ck===t.items.length?"#16a34a":ic?YX_RED:"#999"}}>{ck}/{t.items.length}</div>
+              </div>
+              <div style={{padding:"4px 14px 12px"}}>{t.items.map(item=>{const d=hmsGet(station.id,item.id);return(
+                <div key={item.id} style={{padding:"8px 0",borderTop:"1px solid #f5f3ee"}}>
+                  <button onClick={()=>hmsSet(station.id,item.id,!d)} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,textAlign:"left"}}>
+                    <div style={{width:22,height:22,borderRadius:6,border:d?"none":`2px solid ${ic?YX_RED:"#ccc"}`,background:d?"#16a34a":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0,marginTop:1}}>{d&&"✓"}</div>
+                    <div><div style={{fontSize:12,fontWeight:600,color:d?"#16a34a":YX_DARK,textDecoration:d?"line-through":"none"}}>{item.text}</div><div style={{fontSize:10,color:"#999",marginTop:2}}>{item.desc}</div></div>
+                  </button>
                 </div>
-              </div>
-              <div style={{fontSize:10,color:"#999",marginTop:3}}>
-                {s.totalVisits} besøk
-                {s.slLast&&s.rsLast&&` · Gap: ${Math.abs(s.slLast.pct-s.rsLast.pct)}pp`}
-                {!s.slLast&&!s.rsLast&&"Ikke besøkt"}
-              </div>
+              );})}</div>
             </div>
-          ))}
+          );})}
         </div>
-      </div>
-    );
-  }
-  /* ── HMS ÅRSHJUL ── */
-  if (view==="hms") {
-    const ct = currentTertial();
-    return (
-      <div style={{padding:"20px 20px 40px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
-          <button onClick={()=>setView("home")} style={{fontSize:15,color:"#666",padding:"6px 0"}}>← Tilbake</button>
-          <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:YX_DARK}}>HMS Årshjul</div>
-        </div>
-
-        {!station&&(
-          <div style={{marginTop:20}}>
-            <h2 style={{fontSize:18,fontWeight:800,color:YX_DARK,marginBottom:4}}>Velg stasjon</h2>
-            <p style={{fontSize:12,color:"#888",marginBottom:12}}>HMS-status lagres per stasjon</p>
-            <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {STATIONS.map(s=>(
-                <button key={s.id} onClick={()=>setStation(s)} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"12px 14px",textAlign:"left"}}>
-                  <div style={{fontWeight:600,fontSize:14,color:YX_DARK}}>{s.name}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {station&&(
-          <div style={{marginTop:16}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-              <div>
-                <h2 style={{fontSize:18,fontWeight:800,color:YX_DARK}}>{station.name}</h2>
-                <p style={{fontSize:12,color:"#888"}}>HMS Årshjul — {new Date().getFullYear()}</p>
-              </div>
-              <button onClick={()=>setStation(null)} style={{fontSize:12,color:"#666",textDecoration:"underline"}}>Bytt stasjon</button>
-            </div>
-
-            {HMS_TERTIALS.map(t=>{
-              const isCurrent = t.id===ct;
-              const checked = t.items.filter(i=>getHms(station.id,i.id)).length;
-              const total = t.items.length;
-              return (
-                <div key={t.id} style={{marginBottom:16,border:isCurrent?`2px solid ${YX_RED}`:"1px solid #eae7df",borderRadius:12,overflow:"hidden",background:"#fff"}}>
-                  <div style={{padding:"12px 14px",background:isCurrent?"#CF122D10":"#fafaf7",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div>
-                      <div style={{fontSize:15,fontWeight:700,color:YX_DARK}}>
-                        {t.icon} {t.name}
-                        {isCurrent&&<span style={{marginLeft:8,fontSize:10,fontWeight:800,color:YX_RED,background:"#CF122D15",padding:"2px 6px",borderRadius:4}}>NÅ</span>}
-                      </div>
-                      <div style={{fontSize:12,color:"#888",marginTop:2}}>{t.period} — {t.focus}</div>
-                    </div>
-                    <div style={{fontSize:13,fontWeight:800,color:checked===total?"#16a34a":isCurrent?YX_RED:"#999"}}>{checked}/{total}</div>
-                  </div>
-                  <div style={{padding:"8px 14px 14px"}}>
-                    {t.items.map(item=>{
-                      const done = getHms(station.id,item.id);
-                      return (
-                        <div key={item.id} style={{padding:"10px 0",borderTop:"1px solid #f5f3ee"}}>
-                          <button onClick={()=>saveHms(station.id,item.id,!done)} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,textAlign:"left"}}>
-                            <div style={{width:24,height:24,borderRadius:6,border:done?"none":`2px solid ${isCurrent?YX_RED:"#ccc"}`,background:done?"#16a34a":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0,marginTop:1}}>
-                              {done&&"✓"}
-                            </div>
-                            <div>
-                              <div style={{fontSize:13,fontWeight:600,color:done?"#16a34a":YX_DARK,textDecoration:done?"line-through":"none"}}>{item.text}</div>
-                              <div style={{fontSize:11,color:"#999",marginTop:3,lineHeight:1.3}}>{item.desc}</div>
-                            </div>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    );
-  }
+      )}
+    </div>
+  );}
 
   return null;
 }
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
