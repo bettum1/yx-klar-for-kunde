@@ -640,24 +640,114 @@ function App(){
     );
   }
 
-  /* ── DONE ── */
+  /* ── DONE — with AI summary ── */
   if(view==="done"&&lastVisit){
     const v=lastVisit;const se=isRS?getSE(v.station_id):null;
+
+    // Generate visit summary from data
+    const summary=(()=>{
+      const lines=[];
+      const scores=v.scores||{};
+      const naItems=v.na_items||[];
+
+      // Area breakdown
+      const areas=JOURNEY.map(j=>{
+        let tot=0,max=0;
+        j.items.forEach(item=>{const s=scores[String(item.id)];if(s!==undefined&&!naItems.includes(String(item.id))){tot+=s;max+=item.max;}});
+        const pct=max>0?Math.round(tot/max*100):null;
+        return{name:j.name,icon:j.icon,pct};
+      }).filter(a=>a.pct!==null);
+
+      const best=areas.reduce((a,b)=>a.pct>b.pct?a:b);
+      const worst=areas.reduce((a,b)=>a.pct<b.pct?a:b);
+
+      lines.push(`${v.stationName}: ${v.pct}% totalt.`);
+
+      if(best.pct!==worst.pct){
+        lines.push(`Sterkest på ${best.icon} ${best.name} (${best.pct}%). Svakest på ${worst.icon} ${worst.name} (${worst.pct}%).`);
+      }
+
+      // Failed items
+      const fails=Object.entries(scores).filter(([k,s])=>s===0&&!naItems.includes(k)).map(([k])=>{
+        const item=JOURNEY.flatMap(j=>j.items).find(i=>String(i.id)===k);
+        return item?item.t.split(" — ")[0]:null;
+      }).filter(Boolean);
+
+      if(fails.length>0)lines.push(`Ikke godkjent: ${fails.join(", ")}.`);
+
+      // Partial items
+      const partials=Object.entries(scores).filter(([k,s])=>s>0&&s<5&&!naItems.includes(k)).length;
+      if(partials>0)lines.push(`${partials} punkt${partials>1?"er":""} vurdert som «Delvis».`);
+
+      // Gap with SL
+      if(se){
+        const gap=se.pct-v.pct;
+        if(gap>10)lines.push(`Stasjonens selvevaluering lå ${gap}pp over din score — de overvurderer seg på flere punkter.`);
+        else if(gap<-10)lines.push(`Du scoret ${Math.abs(gap)}pp høyere enn stasjonen selv — de er strengere mot seg selv.`);
+        else lines.push(`Gap mot selvevaluering: ${Math.abs(gap)}pp — godt kalibrert.`);
+      }
+
+      // Notes summary
+      const noteCount=Object.values(v.notes||{}).filter(n=>n&&n.trim()).length;
+      if(noteCount>0)lines.push(`${noteCount} notat${noteCount>1?"er":""} registrert.`);
+      if(v.photo_count>0)lines.push(`${v.photo_count} foto lagret.`);
+
+      // Recommendation
+      if(worst.pct<50)lines.push(`Anbefaling: Prioriter ${worst.name.toLowerCase()} ved neste besøk.`);
+      else if(v.pct>=80)lines.push(`Stasjonen holder god standard. Anerkjenn innsatsen.`);
+
+      return lines;
+    })();
+
     return(
-      <div style={{padding:"50px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",minHeight:"100vh",background:`linear-gradient(170deg,${D} 0%,#162d4a 100%)`}}>
-        <div className="fadeUp" style={{width:88,height:88,borderRadius:44,background:pCol(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:44,marginBottom:20,boxShadow:`0 8px 32px ${pCol(v.pct)}44`}}>✓</div>
+      <div style={{minHeight:"100vh",background:`linear-gradient(170deg,${D} 0%,#162d4a 100%)`,padding:"40px 20px",display:"flex",flexDirection:"column",alignItems:"center"}}>
+        <div className="fadeUp" style={{width:80,height:80,borderRadius:40,background:pCol(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:40,marginBottom:16,boxShadow:`0 8px 32px ${pCol(v.pct)}44`}}>✓</div>
         <div className="fadeUp" style={{color:"rgba(255,255,255,.5)",fontSize:11,letterSpacing:2,textTransform:"uppercase",animationDelay:"100ms"}}>{isRS?"Coaching-besøk":"Selvevaluering"} registrert</div>
         <div className="fadeUp" style={{color:"#fff",fontSize:22,fontWeight:800,marginTop:8,animationDelay:"150ms"}}>{v.stationName}</div>
-        <div className="fadeUp" style={{fontSize:64,fontWeight:900,color:pCol(v.pct),marginTop:24,lineHeight:1,animationDelay:"200ms"}}>{v.pct}%</div>
+        <div className="fadeUp" style={{fontSize:56,fontWeight:900,color:pCol(v.pct),marginTop:20,lineHeight:1,animationDelay:"200ms"}}>{v.pct}%</div>
         <div className="fadeUp" style={{color:"rgba(255,255,255,.6)",fontSize:14,marginTop:6,animationDelay:"250ms"}}>{pLbl(v.pct)}</div>
+
+        {/* Area bars */}
+        <div className="fadeUp" style={{width:"100%",maxWidth:400,marginTop:24,animationDelay:"300ms"}}>
+          {JOURNEY.map(j=>{
+            let tot=0,max=0;
+            j.items.forEach(item=>{const s=v.scores?.[String(item.id)];if(s!==undefined&&!v.na_items?.includes(String(item.id))){tot+=s;max+=item.max;}});
+            const pct=max>0?Math.round(tot/max*100):0;
+            return(
+              <div key={j.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                <span style={{fontSize:13,width:24,textAlign:"center"}}>{j.icon}</span>
+                <div style={{flex:1}}>
+                  <div style={{height:6,background:"rgba(255,255,255,.1)",borderRadius:3,overflow:"hidden"}}>
+                    <div style={{height:"100%",background:pCol(pct),width:pct+"%",borderRadius:3,transition:"width .5s"}}/>
+                  </div>
+                </div>
+                <span style={{fontSize:12,fontWeight:700,color:pCol(pct),width:36,textAlign:"right"}}>{pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Gap */}
         {se&&isRS&&(
-          <div className="fadeUp" style={{marginTop:20,padding:"14px 24px",background:"rgba(255,255,255,.08)",borderRadius:12,border:"1px solid rgba(255,255,255,.1)",animationDelay:"300ms"}}>
-            <div style={{color:"rgba(255,255,255,.7)",fontSize:13}}>Egenvurdering: <b style={{color:"#60a5fa"}}>{se.pct}%</b></div>
-            <div style={{color:"rgba(255,255,255,.4)",fontSize:11,marginTop:4}}>Gap: {Math.abs(v.pct-se.pct)} prosentpoeng</div>
+          <div className="fadeUp" style={{marginTop:16,padding:"12px 20px",background:"rgba(255,255,255,.08)",borderRadius:12,border:"1px solid rgba(255,255,255,.1)",animationDelay:"350ms"}}>
+            <div style={{color:"rgba(255,255,255,.7)",fontSize:13}}>Egenvurdering: <b style={{color:"#60a5fa"}}>{se.pct}%</b> · Gap: <b>{Math.abs(v.pct-se.pct)}pp</b></div>
           </div>
         )}
-        <div className="fadeUp" style={{color:"#4ade80",fontSize:12,marginTop:14,fontWeight:600,animationDelay:"350ms"}}>✓ Lagret i database</div>
-        <button className="fadeUp" onClick={()=>setView("home")} style={{marginTop:40,padding:"15px 32px",background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15,animationDelay:"400ms"}}>Tilbake til stasjoner</button>
+
+        {/* AI Summary */}
+        <div className="fadeUp" style={{width:"100%",maxWidth:400,marginTop:20,background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:14,padding:"16px",animationDelay:"400ms"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
+            <span style={{fontSize:14}}>🤖</span>
+            <span style={{fontSize:13,fontWeight:700,color:"#fff"}}>Oppsummering</span>
+            <span style={{fontSize:9,fontWeight:600,color:"#7c3aed",background:"rgba(124,58,237,.2)",padding:"2px 6px",borderRadius:4}}>AI</span>
+          </div>
+          {summary.map((line,i)=>(
+            <div key={i} style={{fontSize:13,color:"rgba(255,255,255,.75)",lineHeight:1.6,marginBottom:4}}>{line}</div>
+          ))}
+        </div>
+
+        <div className="fadeUp" style={{color:"#4ade80",fontSize:12,marginTop:16,fontWeight:600,animationDelay:"450ms"}}>✓ Lagret i database</div>
+        <button className="fadeUp" onClick={()=>setView("home")} style={{marginTop:28,padding:"15px 32px",background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15,animationDelay:"500ms"}}>Tilbake til stasjoner</button>
       </div>
     );
   }
