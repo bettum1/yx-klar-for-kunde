@@ -39,16 +39,65 @@ const R="#CF122D",D="#0C2340",B="#0B326B";
 
 /* ── Components ── */
 const HAS_SPEECH=!!(window.SpeechRecognition||window.webkitSpeechRecognition);
-function Mic({onText}){
-  const[on,setOn]=useState(false);const r=useRef();
-  if(!HAS_SPEECH)return null;
-  const t=()=>{if(on){r.current?.stop();setOn(false);return;}
-    const S=window.SpeechRecognition||window.webkitSpeechRecognition;
-    const x=new S();x.lang="nb-NO";x.continuous=true;x.interimResults=false;
-    x.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal)onText(e.results[i][0].transcript);};
-    x.onerror=()=>setOn(false);x.onend=()=>setOn(false);
-    r.current=x;x.start();setOn(true);};
-  return<button onClick={t} style={{width:44,height:44,borderRadius:10,background:on?R:"#f0ede5",color:on?"#fff":"#888",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,animation:on?"rec 1s infinite":"none",flexShrink:0}}>{on?"⏹":"🎙️"}</button>;
+
+/* ── Voice: MediaRecorder (all devices) + Speech API (Chrome) ── */
+function Voice({onText,onAudio}){
+  const[mode,setMode]=useState(null); // null | 'speech' | 'rec'
+  const[dur,setDur]=useState(0);
+  const rec=useRef(null);const chunks=useRef([]);const timer=useRef(null);const speech=useRef(null);
+
+  const stopAll=()=>{
+    if(rec.current&&rec.current.state==="recording")rec.current.stop();
+    if(speech.current)speech.current.stop();
+    clearInterval(timer.current);
+    setMode(null);setDur(0);
+  };
+
+  const startRec=async()=>{
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      const mr=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4'});
+      chunks.current=[];
+      mr.ondataavailable=e=>{if(e.data.size>0)chunks.current.push(e.data);};
+      mr.onstop=()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        const blob=new Blob(chunks.current,{type:mr.mimeType});
+        const url=URL.createObjectURL(blob);
+        if(onAudio)onAudio(url,dur);
+        if(onText)onText("[🎙️ Lydnotat "+dur+"s]");
+      };
+      rec.current=mr;mr.start();
+      setMode('rec');setDur(0);
+      timer.current=setInterval(()=>setDur(d=>d+1),1000);
+    }catch(e){alert("Kunne ikke starte opptak. Sjekk at du har gitt tillatelse til mikrofon.");}
+  };
+
+  const startSpeech=()=>{
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    const x=new SR();x.lang="nb-NO";x.continuous=true;x.interimResults=false;
+    x.onresult=e=>{for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal&&onText)onText(e.results[i][0].transcript);};
+    x.onerror=()=>setMode(null);x.onend=()=>setMode(null);
+    speech.current=x;x.start();setMode('speech');
+  };
+
+  if(mode)return(
+    <button onClick={stopAll} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 12px",borderRadius:10,background:R,color:"#fff",fontSize:12,fontWeight:700,animation:"rec 1s infinite",flexShrink:0}}>
+      <span>⏹</span>
+      {mode==='rec'&&<span>{dur}s</span>}
+      {mode==='speech'&&<span>Lytter...</span>}
+    </button>
+  );
+
+  // Show both options if speech is available
+  if(HAS_SPEECH)return(
+    <div style={{display:"flex",gap:4,flexShrink:0}}>
+      <button onClick={startSpeech} title="Tale til tekst" style={{width:40,height:40,borderRadius:10,background:"#f0ede5",color:"#888",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>💬</button>
+      <button onClick={startRec} title="Lydopptak" style={{width:40,height:40,borderRadius:10,background:"#f0ede5",color:"#888",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>🎙️</button>
+    </div>
+  );
+
+  // Only recording available (Safari/iPad)
+  return <button onClick={startRec} title="Lydopptak" style={{width:44,height:44,borderRadius:10,background:"#f0ede5",color:"#888",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>🎙️</button>;
 }
 
 function Cam({photos,onAdd,onRemove}){const ref=useRef();const h=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=v=>onAdd(v.target.result);r.readAsDataURL(f);e.target.value="";};return(<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{(photos||[]).map((p,i)=>(<div key={i} style={{position:"relative",width:56,height:56,borderRadius:8,overflow:"hidden",border:"2px solid #eae7df"}}><img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}}/><button onClick={()=>onRemove(i)} style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,.7)",color:"#fff",borderRadius:10,width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}<button onClick={()=>ref.current?.click()} style={{width:56,height:56,borderRadius:8,border:"2px dashed #ccc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#aaa",background:"#fafaf7"}}>📷</button><input ref={ref} type="file" accept="image/*" capture="environment" onChange={h}/></div>);}
@@ -62,43 +111,43 @@ const lFor=(m,v)=>v===0?{l:"Ikke godkjent",c:"#dc2626"}:v>=m?{l:"Godkjent",c:"#1
 const pCol=p=>p>=85?"#16a34a":p>=70?"#65a30d":p>=55?"#d97706":p>=40?"#ea580c":"#dc2626";
 const pLbl=p=>p>=85?"Utmerket":p>=70?"Godt":p>=55?"OK":p>=40?"Trenger oppfølging":"Kritisk";
 
-/* ── Journey — 20 items, 5 per step ── */
+/* ── Journey — 20 items, final version ── */
 const JOURNEY=[
-  {id:"ankomst",name:"Ankomst & synlighet",icon:"🚗",step:1,img:"img/journey-2-pumpe.jpg",
-   desc:"Hva ser bilisten fra veien? Ville du stoppet her?",
+  {id:"ankomst",name:"Ankomst",icon:"🚗",step:1,img:"img/journey-2-pumpe.jpg",
+   desc:"Det kunden ser fra veien. Ville du stoppet her?",
    items:[
-    {id:1,t:"Helhetsinntrykk ute — ryddig, søppelfritt, skilting synlig ved adkomst",q:"Hva er det første inntrykket når du kjører inn? Ville du stoppet?",max:5},
-    {id:2,t:"Belysning — alt fungerer ute, tent etter mørkets frembrudd",q:"Har dere fast rutine for belysningssjekk?",max:5},
-    {id:3,t:"Pumpetak og skilting — rent, helt, kun YX-godkjent materiell",q:"Når ble pumpetak og skilting sist vurdert?",max:5},
-    {id:4,t:"Toaletter — rene, velstelte, luktfrie, lys fungerer",q:"Hvor ofte sjekkes toalettet gjennom dagen?",max:5},
-    {id:5,t:"Pumpeøyer og grøntområder — frie for søppel, velstelte, ingen ugress",q:"Hvem har ansvar for uterunden?",max:5},
+    {id:1,t:"Prismast og skilting — hel, opplyst, riktige priser som stemmer med pumpe og kasse",q:"Prisene er den første dialogen med kunden. Hva er rutinen for å sjekke at de stemmer — pylonen, pumpa og kassa?",max:5},
+    {id:2,t:"Forplass og renhold — fri for søppel, søl og ugress. Søppeldunker tømt, spylevæske/nal/papir på plass",q:"En skitten forplass er grunn #1 til at kunder ikke kommer tilbake. Hvem eier timesjekken ute?",max:5},
+    {id:3,t:"Lys og fasade — all belysning ute virker, bygningen er hel og presentabel, ingen falmet folie",q:"Belysning = trygghet. Når gikk du sist runden på kvelden for å se stasjonen med kundens øyne?",max:5},
+    {id:4,t:"Tilleggstjenester — bilvask, støvsuger, luft/vann og lader fungerer og er tydelig merket",q:"Laderne er like viktige som pumpene nå. Hvordan fanger dere opp at noe er nede?",max:5},
+    {id:5,t:"Kampanjeplakater — forplassen plakatert iht. kundereisen og gjeldende K-periode. Rammer og materiell oppdatert",q:"Sjekk mot kampanjebrevet. Mangler rammer eller plakater? Bestill via Happeo. Utgått materiell fjernes.",max:5},
   ]},
-  {id:"tanking",name:"Tanking & betaling",icon:"⛽",step:2,img:"img/journey-3-pumpedetalj.jpg",
-   desc:"Kunden står her 3–5 minutter. Kvalitet på utstyr og informasjon teller.",
+  {id:"tanking",name:"Ved pumpa",icon:"⛽",step:2,img:"img/journey-3-pumpedetalj.jpg",
+   desc:"Kunden står her i 3–5 minutter. Alt kjennes.",
    items:[
-    {id:6,t:"Alle pumper fungerer og er rene",q:"Hva gjør dere når en pumpe feiler? Hvor fort fikses det?",max:5},
-    {id:7,t:"Pistoler, slanger og håndtak hele, med sprutsikring og hansker for diesel",q:"Dokumenteres feil? Hvem følger opp?",max:5},
-    {id:8,t:"Forbruksmateriell — nål, vann, tørkepapir, søppelkasse ved hver øy",q:"Sjekkes dette daglig? Hvem har ansvaret?",max:5},
-    {id:9,t:"Sikkerhet — brannslukkere tilgjengelige, innenfor dato. Sikkerhetsskilt synlige",q:"Når ble brannslukkere sist kontrollert?",max:5},
-    {id:10,t:"Betaling ved pumpe — tydelig skiltet, utstyr fungerer",q:"Hvordan løses betalingsproblemer ute?",max:5},
+    {id:6,t:"Pistol og slange — hele, uten drypp eller sprekker, auto-stopp fungerer",q:"Pistolen er det eneste kunden tar på i 3 minutter. Hva er den daglige sjekken?",max:5},
+    {id:7,t:"Pumperenhold — ren å ta på, dieselhansker tilgjengelig, ingen håndskrevne lapper",q:"Hvordan oppleves det å ta på pumpa med bare hender? Prøvd selv i dag?",max:5},
+    {id:8,t:"Betaling — kortleser fungerer (chip, kontaktløs, BankAxept, flåtekort), kvittering tilgjengelig",q:"En død kortleser = null omsetning ubetjent. Hva er rutinen for å oppdage det før kunden klager?",max:5},
+    {id:9,t:"Brannslukker og spillutstyr — slukker servicert siste 12 mnd, trykk i grønt, spillkit komplett",q:"Gå gjennom med meg: hva gjør en ny ansatt ved et søl — steg for steg?",max:5,autoFail:true},
+    {id:10,t:"Sikkerhetsskilt og nødstopp — røykeforbud, 'stopp motor', nødstopp synlige og hele. Nødstopp testet denne mnd",q:"Kan alle ansatte demonstrere nødstopp-rutinen uten å nøle?",max:5,autoFail:true},
   ]},
-  {id:"butikk",name:"Inn i butikken",icon:"🛒",step:3,img:"img/journey-4-fasade.jpg",
-   desc:"Overgangen fra ute til inne. Siktlinje, renhold og produkttilgjengelighet.",
+  {id:"butikk",name:"I butikken",icon:"🛒",step:3,img:"img/journey-4-fasade.jpg",
+   desc:"Her tjener vi pengene. Renhold, mat og kampanje avgjør.",
    items:[
-    {id:11,t:"Renhold — gulv, hyller, disk, inngangsparti rent og ryddig",q:"Hvordan ser rutinen for renhold ut gjennom dagen?",max:5},
-    {id:12,t:"Varesortiment — planogram fulgt, fulle hyller, ingen utløpte varer",q:"Hvem sjekker datomerking? Hvor ofte?",max:5},
-    {id:13,t:"Kampanje og eksponering — materiell iht. plan, uhindret siktlinje inn",q:"Er gjeldende kampanje på plass? Når ble det sist sjekket?",max:5},
-    {id:14,t:"Mat, drikke, kjøl/frys — fungerer, rent, temperaturlogg ført",q:"Er temperaturlogg tilgjengelig? Matvaresikkerhet fulgt?",max:5},
-    {id:15,t:"Sikkerhet og betaling — rømningsveier frie, alle betalingsformer akseptert",q:"Noe friksjon med betalingsformer? Aksepteres YX-appen?",max:5},
+    {id:11,t:"Toalett — rent, luktfritt, fylt opp med papir og såpe. Renholdslogg signert siste 2 timer",q:"67% av kundene sier toalettet avgjør om de stopper. Hva hindrer oss i en 2-timers signering?",max:5},
+    {id:12,t:"Matsikkerhet — temperaturlogg ført i dag (kjøl ≤4°, frys ≤−18°, varme ≥60°). Ingen varer over dato",q:"Mattilsynet krever full fareanalyse. Hvilken person eier matsikkerheten her?",max:5,autoFail:true},
+    {id:13,t:"Kaffe og varmmat — kaffestasjonen ren, fylt og fersk. Pølser/varmmat innenfor holdetid",q:"Kaffe er #1-grunnen til at kunden går inn. Hvem eier kaffestasjonen hvert skift?",max:5},
+    {id:14,t:"Hyller og kampanje — topp-20 varer i hylle, planogram fulgt, kampanje bygget riktig med rett pris",q:"Fulle hyller gir 8% salgsløft. Hvilke tre varer er absolutt 'aldri tomt' hos dere?",max:5},
+    {id:15,t:"Renhold og sikkerhet — gulv, disk og kasse rent. Alle lys på. Rømningsveier frie for varer",q:"Hvor ofte finner du varer i rømningsveien 'bare for noen minutter'?",max:5,autoFail:true},
   ]},
   {id:"motet",name:"Møtet med oss",icon:"👥",step:4,img:"img/journey-5-butikkvegg.jpg",
-   desc:"Det siste inntrykket. Her bygges lojalitet — eller mistes.",
+   desc:"Det siste inntrykket. Her avgjøres om kunden kommer tilbake.",
    items:[
-    {id:16,t:"Uniform, navneskilt — ansatte er presentable og gjenkjennelige",q:"Følges uniformskravet i praksis? Har alle navneskilt?",max:5},
-    {id:17,t:"Hilser, øyekontakt, smiler — kunden føler seg sett og velkommen",q:"Hva gjør dere for at kunden skal føle seg sett?",max:5},
-    {id:18,t:"Kompetanse — kan svare på spørsmål, kjenner sortimentet",q:"Når ble det sist gjort produktopplæring?",max:5},
-    {id:19,t:"Kassehåndtering — korrekt betaling, kvittering, effektiv avvikling",q:"Opplæring i kassehåndtering — når sist?",max:5},
-    {id:20,t:"Mersalg — anbefaler kampanjeprodukter, nevner YX-appen",q:"Hva er de beste mersalgsfrasene dere bruker? Nevnes appen?",max:5},
+    {id:16,t:"Hilsen — kunden møtt med blikkontakt og 'hei' innen 10 sekunder, også når ansatte var opptatt",q:"Hva er deres hei-rutine når bare én ansatt er på vakt og det er kø?",max:5},
+    {id:17,t:"Mersalg — minst ett relevant forslag knyttet til gjeldende kampanje uten å virke pågående",q:"Hvilken kampanje-frase bruker dere denne uka — og hvordan trener dere nye på den?",max:5},
+    {id:18,t:"Kasse — betaling korrekt og effektiv. COOP-bonus spurt. Alderssjekk på tobakk/energidrikk",q:"Hvor mange ganger per dag glemmes Trumf-spørsmålet? Hva koster det oss?",max:5},
+    {id:19,t:"Uniform og kompetanse — ren YX-uniform, navneskilt, kan svare på produktspørsmål",q:"Hvor mange dager opplæring får en ny ansatt før de står alene i kassa?",max:5},
+    {id:20,t:"Avslutning — kunden takket med blikkontakt og varm avslutning. Klage håndtert rolig",q:"Hva er YX-farvel-frasen dere bruker? Hvordan reagerer dere på en klage?",max:5},
   ]},
 ];
 
@@ -489,7 +538,7 @@ function App(){
                   <div style={{display:"flex",alignItems:"flex-start",gap:6,marginTop:10}}>
                     <textarea placeholder="Notat..." value={GN(item.id)} onChange={e=>SN(item.id,e.target.value)}
                       style={{flex:1,minHeight:40,border:"1px solid #eae7df",borderRadius:10,padding:"10px 12px",fontSize:14,color:"#444",background:"#fafaf7"}}/>
-                    <Mic onText={t=>SN(item.id,(GN(item.id)?GN(item.id)+" ":"")+t)}/>
+                    <Voice onText={t=>SN(item.id,(GN(item.id)?GN(item.id)+" ":"")+t)}/>
                   </div>
                 )}
                 {!ina&&<Cam photos={photos[item.id]||[]} onAdd={d=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),d]}))} onRemove={idx=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}/>}
@@ -511,7 +560,7 @@ function App(){
               <div style={{display:"flex",gap:6}}>
                 <textarea placeholder="Avtaler, oppfølging, observasjoner..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
                   style={{flex:1,minHeight:80,border:"1px solid #eae7df",borderRadius:10,padding:"12px",fontSize:14,color:"#444",background:"#fafaf7"}}/>
-                <Mic onText={t=>setVisitNote(v=>(v?v+" ":"")+t)}/>
+                <Voice onText={t=>setVisitNote(v=>(v?v+" ":"")+t)}/>
               </div>
             </div>
           )}
