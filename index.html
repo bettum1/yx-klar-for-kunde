@@ -195,35 +195,32 @@ const JOURNEY=[
   ]},
 ];
 
-/* ── HMS Årshjul ── */
-const HMS=[
-  {id:"t1",name:"Tertial 1",period:"Jan–Apr",icon:"📋",focus:"HMS-revisjon og planlegging",items:[
-    {id:"h1",t:"Årlig revisjon av HMS-dokumentasjon"},
-    {id:"h2",t:"Risikovurdering oppdatert med tiltak"},
-    {id:"h3",t:"Beredskapsplan gjennomgått med ansatte"},
-    {id:"h4",t:"Vernerunde gjennomført (vinter)"},
-    {id:"h5",t:"Varetelling — hovedtelling gjennomført"},
-    {id:"h6",t:"Brannslukkeutstyr kontrollert"},
-    {id:"h7",t:"Nødbelysning og rømningsveier sjekket"},
+/* ── HMS Årshjul — integrated as Step 5 ── */
+const HMS_DATA={
+  t1:{period:"Jan–Apr",items:[
+    {id:"h1",t:"Årlig revisjon av HMS-dokumentasjon gjennomført og oppdatert",q:"Hvor finner de ansatte HMS-dokumentasjonen? Er den lett tilgjengelig?",max:5},
+    {id:"h2",t:"Risikovurdering oppdatert — nye risikoer vurdert, tiltak på plass",q:"Når ble risikovurderingen sist gjennomgått med de ansatte?",max:5},
+    {id:"h3",t:"Beredskapsplan gjennomgått med alle ansatte — kontaktlister oppdatert",q:"Kan alle ansatte forklare hva de gjør ved brann, ran eller personskade?",max:5},
+    {id:"h4",t:"Vernerunde (vinter) gjennomført — sklisikring, snørydding, belysning",q:"Hvordan ser sklisikringsrutinen ut en iskald morgen kl 06?",max:5},
+    {id:"h5",t:"Brannslukkeutstyr og nødbelysning kontrollert — rømningsveier sjekket",q:"Når ble siste brannøvelse gjennomført? Var alle ansatte med?",max:5},
   ]},
-  {id:"t2",name:"Tertial 2",period:"Mai–Aug",icon:"☀️",focus:"Sommerdrift og brannsikkerhet",items:[
-    {id:"h8",t:"HMS-opplæring for sommervikarer gjennomført"},
-    {id:"h9",t:"Sommerklargjøring uteareal"},
-    {id:"h10",t:"Brann- og grilltiltak gjennomgått"},
-    {id:"h11",t:"Førstehjelp — utstyr sjekket, prosedyrer gjennomgått"},
-    {id:"h12",t:"Kjemikalier — oppbevaring og datablader sjekket"},
-    {id:"h13",t:"Kjøle-/fryseanlegg kontrollert for sommerdrift"},
+  t2:{period:"Mai–Aug",items:[
+    {id:"h6",t:"HMS-opplæring for sommervikarer gjennomført før selvstendig arbeid",q:"Hvor mange timer opplæring får en sommervikar? Hva dekkes?",max:5},
+    {id:"h7",t:"Sommerklargjøring — uteareal, grøntanlegg, drenering gjennomgått",q:"Hvem har ansvaret for utearealet om sommeren?",max:5},
+    {id:"h8",t:"Brann- og grilltiltak — propanoppbevaring og -salg gjennomgått",q:"Hvordan oppbevares propan? Vet alle ansatte rutinene?",max:5},
+    {id:"h9",t:"Førstehjelp — utstyr sjekket, innenfor dato, prosedyrer gjennomgått",q:"Hvem har førstehjelpskurs? Når utløper det?",max:5},
+    {id:"h10",t:"Kjemikalier — oppbevaring, merking og sikkerhetsdatablader kontrollert",q:"Er datablader lett tilgjengelige for alle ansatte?",max:5},
   ]},
-  {id:"t3",name:"Tertial 3",period:"Sep–Des",icon:"❄️",focus:"Vinterklargjøring og årsavslutning",items:[
-    {id:"h14",t:"Vinterklargjøring — salt, utstyr, varmekabler"},
-    {id:"h15",t:"Vernerunde gjennomført (høst)"},
-    {id:"h16",t:"Varme- og ventilasjonsanlegg kontrollert"},
-    {id:"h17",t:"HMS-årsrapport utarbeidet"},
-    {id:"h18",t:"Medarbeidersamtaler med HMS-fokus"},
-    {id:"h19",t:"HMS-plan for neste år utarbeidet"},
+  t3:{period:"Sep–Des",items:[
+    {id:"h11",t:"Vinterklargjøring — salt/sand, brøyteavtale, varmekabler sjekket",q:"Er brøyteavtalen på plass? Hvem rydder snø før åpning?",max:5},
+    {id:"h12",t:"Vernerunde (høst) gjennomført — belysning, inngangsparti, ventilasjon",q:"Hva fant dere på siste vernerunde? Ble alt lukket?",max:5},
+    {id:"h13",t:"Varme- og ventilasjonsanlegg kontrollert og servicert før vinter",q:"Når ble varmeanlegget sist servicert?",max:5},
+    {id:"h14",t:"HMS-årsrapport — avvik, hendelser og tiltak oppsummert for ledelsen",q:"Hvor mange avvik ble lukket i år vs. fremdeles åpne?",max:5},
+    {id:"h15",t:"HMS-plan for neste år utarbeidet basert på årets erfaringer",q:"Hva er de tre viktigste HMS-tiltakene for neste år?",max:5},
   ]},
-];
+};
 const curT=()=>{const m=new Date().getMonth()+1;return m<=4?"t1":m<=8?"t2":"t3";};
+const hmsStep=()=>({id:"hms",name:"HMS — "+({t1:"Jan–Apr",t2:"Mai–Aug",t3:"Sep–Des"}[curT()]),icon:"⚠️",step:5,img:"img/journey-1-vei.jpg",desc:"HMS-gjennomgang for gjeldende tertial. Lovpålagt internkontroll.",items:HMS_DATA[curT()].items});
 
 function App(){
   const[loading,setLoading]=useState(true);
@@ -251,7 +248,11 @@ function App(){
   const[loginLoad,setLoginLoad]=useState(false);
   const[showRef,setShowRef]=useState(false);
   const[showAll,setShowAll]=useState(false);
-  const[hms,setHms]=useState({});
+  const[includeHms,setIncludeHms]=useState(null); // null=not asked, true/false
+  const[stationView,setStationView]=useState(null); // station detail view
+
+  // Dynamic journey steps — 4 base + optional HMS
+  const journeySteps=useMemo(()=>includeHms?[...JOURNEY,hmsStep()]:JOURNEY,[includeHms]);
 
   useEffect(()=>{
     sb.auth.getSession().then(({data:{session}})=>{if(session){setUser(session.user);loadProf(session.user.id);}else setLoading(false);});
@@ -266,19 +267,6 @@ function App(){
     const{data:v}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);setVisits(v||[]);
     const{data:se}=await sb.from("visits").select("*").eq("visit_role","sl").order("created_at",{ascending:false}).limit(300);setSelfEvals(se||[]);
     if(navigator.geolocation)navigator.geolocation.getCurrentPosition(p=>setLoc({lat:p.coords.latitude,lng:p.coords.longitude}),()=>{});
-    // Load HMS
-    const{data:hd}=await sb.from("hms_checks").select("*").eq("year",new Date().getFullYear());
-    if(hd){const h={};hd.forEach(r=>{if(r.checked)h[r.station_id+"_"+r.item_id]=true;});setHms(h);}
-  };
-  const hmsToggle=async(stId,itemId)=>{
-    const k=stId+"_"+itemId;const v=!hms[k];
-    setHms(h=>({...h,[k]:v}));
-    const tert=curT();
-    if(v){
-      await sb.from("hms_checks").upsert({station_id:stId,tertial:tert,item_id:itemId,year:new Date().getFullYear(),checked:true,checked_by:user.id,checked_at:new Date().toISOString()},{onConflict:"station_id,tertial,item_id,year"});
-    } else {
-      await sb.from("hms_checks").update({checked:false}).match({station_id:stId,item_id:itemId,year:new Date().getFullYear()});
-    }
   };
   const login=async()=>{setLoginErr("");setLoginLoad(true);const{error}=await sb.auth.signInWithPassword({email:loginEmail,password:loginPw});if(error)setLoginErr("Feil e-post eller passord");setLoginLoad(false);};
   const logout=async()=>{await sb.auth.signOut();};
@@ -290,7 +278,7 @@ function App(){
   const SN=(id,v)=>setNotes(n=>({...n,[String(id)]:v}));
   const GN=id=>notes[String(id)]||"";
 
-  const aMax=JOURNEY.reduce((s,c)=>s+c.items.filter(i=>!isNA(i.id)).reduce((a,b)=>a+b.max,0),0);
+  const aMax=journeySteps.reduce((s,c)=>s+c.items.filter(i=>!isNA(i.id)).reduce((a,b)=>a+b.max,0),0);
   const tScore=Object.entries(scores).filter(([k])=>!na[k]).reduce((s,[,v])=>s+(v||0),0);
   const tPct=aMax>0?Math.round(tScore/aMax*100):0;
 
@@ -311,7 +299,7 @@ function App(){
 
   const role=profile?.role;
   const isRS=role==="regionssjef";
-  const cancelAudit=()=>{const hw=Object.keys(scores).length>0;if(hw&&!confirm("Avbryte? Alt arbeid går tapt."))return;setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setShowRef(false);setView("home");};
+  const cancelAudit=()=>{const hw=Object.keys(scores).length>0;if(hw&&!confirm("Avbryte? Alt arbeid går tapt."))return;setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setShowRef(false);setIncludeHms(null);setView("home");};
 
   /* ── LOADING ── */
   if(loading)return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:D}}>
@@ -340,7 +328,7 @@ function App(){
     return(
     <div style={{paddingBottom:40}}>
       {/* Header */}
-      <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
         <img src={LW} alt="YX" style={{height:24}}/>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
           <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
@@ -377,7 +365,7 @@ function App(){
         <div style={{background:"#fff",borderRadius:14,border:"1px solid #eae7df",padding:16,marginBottom:16}}>
           <div style={{fontSize:13,fontWeight:700,color:D,marginBottom:10}}>Kundereisen — 4 steg</div>
           <div style={{display:"flex",gap:4}}>
-            {JOURNEY.map((j,i)=>(
+            {journeySteps.map((j,i)=>(
               <div key={j.id} style={{flex:1,textAlign:"center"}}>
                 <div style={{fontSize:20,marginBottom:4}}>{j.icon}</div>
                 <div style={{fontSize:9,fontWeight:600,color:D,lineHeight:1.2}}>{j.name}</div>
@@ -385,16 +373,6 @@ function App(){
             ))}
           </div>
         </div>
-
-        {/* HMS Årshjul */}
-        <button onClick={()=>setView("hms")} style={{width:"100%",background:"#fff",border:"2px solid "+D,borderRadius:14,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
-          <span style={{fontSize:24}}>⚠️</span>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:14,color:D}}>HMS Årshjul</div>
-            <div style={{fontSize:11,color:"#888",marginTop:1}}>Gjeldende: {HMS.find(t=>t.id===curT())?.name} ({HMS.find(t=>t.id===curT())?.period})</div>
-          </div>
-          <span style={{color:"#999",fontSize:14}}>→</span>
-        </button>
 
         {/* Search */}
         <div style={{position:"relative",marginBottom:14}}>
@@ -471,7 +449,7 @@ function App(){
     const ci=cat.items.filter(i=>!isNA(i.id));
     const cMax=ci.reduce((s,i)=>s+i.max,0);
     const cScore=ci.reduce((s,i)=>s+(G(i.id)||0),0);
-    const isLast=catIdx===JOURNEY.length-1;
+    const isLast=catIdx===journeySteps.length-1;
     const se=isRS?getSE(station.id):null;
 
     // FIX: items that need evidence (scored non-max, not N/A, no photo and no comment)
@@ -498,7 +476,7 @@ function App(){
           <div style={{position:"absolute",bottom:16,left:16,right:16}}>
             {/* Journey steps */}
             <div style={{display:"flex",gap:4,marginBottom:12}}>
-              {JOURNEY.map((j,i)=>(
+              {journeySteps.map((j,i)=>(
                 <div key={j.id} style={{flex:1,height:4,borderRadius:2,background:i<=catIdx?R:"rgba(255,255,255,.2)",transition:"background .3s"}}/>
               ))}
             </div>
@@ -622,11 +600,23 @@ function App(){
             <span style={{fontWeight:800,color:D,fontSize:14}}>{tPct}%</span>
             <span style={{color:"#999"}}>Totalt {tScore}/{aMax}</span>
           </div>
-          <div style={{display:"flex",gap:8}}>
-            {catIdx>0&&<button onClick={()=>{setCatIdx(i=>i-1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:15}}>←</button>}
-            {!isLast?<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}setCatIdx(i=>i+1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:2,padding:"15px",background:canAdvance?D:"#ccc",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15}}>Neste steg →</button>
-            :<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}submit();}} disabled={saving} style={{flex:2,padding:"15px",background:canAdvance?R:"#ccc",color:"#fff",borderRadius:12,fontWeight:800,fontSize:15,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør besøk ✓"}</button>}
-          </div>
+
+          {/* HMS prompt — shown after step 4 if not yet asked */}
+          {catIdx===3&&includeHms===null?(
+            <div>
+              <div style={{fontSize:12,color:D,fontWeight:600,textAlign:"center",marginBottom:8}}>⚠️ Gjennomføre HMS-tertialpunkter på dette besøket?</div>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}setIncludeHms(false);submit();}} disabled={saving} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:14,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør uten HMS"}</button>
+                <button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar først.");return;}setIncludeHms(true);setCatIdx(4);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#d97706",color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>⚠️ Ja, HMS →</button>
+              </div>
+            </div>
+          ):(
+            <div style={{display:"flex",gap:8}}>
+              {catIdx>0&&<button onClick={()=>{setCatIdx(i=>i-1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:15}}>←</button>}
+              {!isLast?<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}setCatIdx(i=>i+1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:2,padding:"15px",background:canAdvance?D:"#ccc",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15}}>Neste steg →</button>
+              :<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}submit();}} disabled={saving} style={{flex:2,padding:"15px",background:canAdvance?R:"#ccc",color:"#fff",borderRadius:12,fontWeight:800,fontSize:15,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør besøk ✓"}</button>}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -650,72 +640,6 @@ function App(){
         )}
         <div className="fadeUp" style={{color:"#4ade80",fontSize:12,marginTop:14,fontWeight:600,animationDelay:"350ms"}}>✓ Lagret i database</div>
         <button className="fadeUp" onClick={()=>setView("home")} style={{marginTop:40,padding:"15px 32px",background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15,animationDelay:"400ms"}}>Tilbake til stasjoner</button>
-      </div>
-    );
-  }
-
-  /* ── HMS ÅRSHJUL ── */
-  if(view==="hms"){
-    const ct=curT();
-    // If stasjonsleder, auto-select their station
-    const hmsSt=isSL&&stations.length===1?stations[0]:station;
-    return(
-      <div style={{paddingBottom:40}}>
-        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <button onClick={()=>{setView("home");}} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>← Tilbake</button>
-          <span style={{color:"#fff",fontSize:14,fontWeight:700}}>HMS Årshjul</span>
-          <span style={{width:60}}/>
-        </div>
-        <div style={{padding:"16px 20px"}}>
-          {!hmsSt?(
-            <div>
-              <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:12}}>Velg stasjon</div>
-              <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                {filt.slice(0,10).map(s=>(
-                  <button key={s.id} onClick={()=>setStation(s)} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"12px 16px",textAlign:"left",fontWeight:600,color:D}}>{s.name}</button>
-                ))}
-              </div>
-            </div>
-          ):(
-            <div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-                <div>
-                  <div style={{fontSize:18,fontWeight:800,color:D}}>{hmsSt.name}</div>
-                  <div style={{fontSize:12,color:"#888"}}>HMS {new Date().getFullYear()}</div>
-                </div>
-                {!isSL&&<button onClick={()=>setStation(null)} style={{fontSize:12,color:B,fontWeight:600}}>Bytt stasjon</button>}
-              </div>
-              {HMS.map(t=>{
-                const ic=t.id===ct;
-                const ck=t.items.filter(i=>hms[hmsSt.id+"_"+i.id]).length;
-                return(
-                  <div key={t.id} style={{marginBottom:14,border:ic?`2px solid ${R}`:"1px solid #eae7df",borderRadius:14,overflow:"hidden",background:"#fff"}}>
-                    <div style={{padding:"12px 16px",background:ic?R+"08":"#fafaf7",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div>
-                        <div style={{fontSize:15,fontWeight:700,color:D}}>
-                          {t.icon} {t.name} {ic&&<span style={{fontSize:10,fontWeight:800,color:R,background:R+"15",padding:"2px 8px",borderRadius:5,marginLeft:6}}>NÅ</span>}
-                        </div>
-                        <div style={{fontSize:11,color:"#888",marginTop:2}}>{t.period} — {t.focus}</div>
-                      </div>
-                      <div style={{fontSize:14,fontWeight:800,color:ck===t.items.length?"#16a34a":ic?R:"#999"}}>{ck}/{t.items.length}</div>
-                    </div>
-                    <div style={{padding:"6px 16px 14px"}}>
-                      {t.items.map(item=>{
-                        const done=hms[hmsSt.id+"_"+item.id];
-                        return(
-                          <button key={item.id} onClick={()=>hmsToggle(hmsSt.id,item.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderTop:"1px solid #f5f3ee",textAlign:"left"}}>
-                            <div style={{width:26,height:26,borderRadius:7,border:done?"none":`2px solid ${ic?R:"#ccc"}`,background:done?"#16a34a":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{done&&"✓"}</div>
-                            <div style={{fontSize:13,fontWeight:done?500:600,color:done?"#16a34a":D,textDecoration:done?"line-through":"none"}}>{item.t}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
     );
   }
