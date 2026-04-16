@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#CF122D">
 <title>YX — Klar for Kunde</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,6 +18,7 @@
   textarea{font-family:inherit;font-size:15px;border:none;outline:none;background:transparent;color:inherit;resize:none}
   input[type="file"]{display:none}
   @keyframes rec{0%,100%{opacity:1}50%{opacity:.3}}
+  .gap-badge{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700}
 </style>
 </head>
 <body>
@@ -33,182 +33,149 @@ const LOGO_C = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAA4QAAASNCAYAAAAb5p
 const YX_RED = "#CF122D";
 const YX_DARK = "#0C2340";
 
-/* ── SCORE LABELS ── */
+/* ── SCORE SYSTEM ── */
 const LABELS = {
   5: [{v:0,l:"Ikke godkjent",c:"#dc2626"},{v:1,l:"Svakt",c:"#f97316"},{v:2,l:"Mangler",c:"#eab308"},{v:3,l:"OK",c:"#84cc16"},{v:4,l:"Bra",c:"#22c55e"},{v:5,l:"Godkjent",c:"#16a34a"}],
   2: [{v:0,l:"Ikke godkjent",c:"#dc2626"},{v:1,l:"Delvis",c:"#eab308"},{v:2,l:"Godkjent",c:"#16a34a"}],
   1: [{v:0,l:"Nei",c:"#dc2626"},{v:1,l:"Ja",c:"#16a34a"}],
 };
+const labelFor = (max, val) => (LABELS[max]||LABELS[5]).find(l=>l.v===val);
 
-/* ── AUDIO RECORDER HOOK ── */
+/* ── AUDIO RECORDER ── */
 function useRecorder() {
   const [recording, setRecording] = useState(false);
-  const mediaRef = useRef(null);
-  const chunksRef = useRef([]);
-
+  const mr = useRef(null), chunks = useRef([]);
   const start = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/mp4' });
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mediaRef.current = mr;
-      mr.start();
-      setRecording(true);
-    } catch (e) {
-      alert("Kunne ikke starte opptak. Gi tilgang til mikrofon.");
-    }
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const m = new MediaRecorder(stream, {mimeType: MediaRecorder.isTypeSupported('audio/webm')?'audio/webm':'audio/mp4'});
+      chunks.current = [];
+      m.ondataavailable = e => { if(e.data.size>0) chunks.current.push(e.data); };
+      mr.current = m; m.start(); setRecording(true);
+    } catch(e) { alert("Gi tilgang til mikrofon."); }
   }, []);
-
-  const stop = useCallback(() => {
-    return new Promise((resolve) => {
-      const mr = mediaRef.current;
-      if (!mr || mr.state === "inactive") { resolve(null); return; }
-      mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: mr.mimeType });
-        const reader = new FileReader();
-        reader.onloadend = () => { resolve(reader.result); };
-        reader.readAsDataURL(blob);
-        mr.stream.getTracks().forEach(t => t.stop());
-        setRecording(false);
-      };
-      mr.stop();
-    });
-  }, []);
-
-  return { recording, start, stop };
+  const stop = useCallback(() => new Promise(res => {
+    const m = mr.current;
+    if(!m||m.state==="inactive"){res(null);return;}
+    m.onstop = () => { const b=new Blob(chunks.current,{type:m.mimeType}); const r=new FileReader(); r.onloadend=()=>res(r.result); r.readAsDataURL(b); m.stream.getTracks().forEach(t=>t.stop()); setRecording(false); };
+    m.stop();
+  }), []);
+  return {recording, start, stop};
 }
 
-/* ── AUDIO BUTTON ── */
-function AudioBtn({ audioClip, onRecord, onDelete }) {
-  const { recording, start, stop } = useRecorder();
-  const audioRef = useRef();
-
-  const toggle = async () => {
-    if (recording) {
-      const data = await stop();
-      if (data) onRecord(data);
-    } else {
-      start();
-    }
-  };
-
+function AudioBtn({clip, onRecord, onDelete}) {
+  const {recording, start, stop} = useRecorder();
+  const aRef = useRef();
+  const toggle = async () => { if(recording){const d=await stop();if(d)onRecord(d);}else start(); };
   return (
-    <div style={{display:"flex",alignItems:"center",gap:6}}>
-      <button onClick={toggle}
-        style={{padding:"6px 10px",borderRadius:6,fontSize:12,fontWeight:600,
-          background: recording ? YX_RED : "#f5f3ee",
-          color: recording ? "#fff" : "#666",
-          animation: recording ? "rec 1s infinite" : "none",
-          display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-        {recording ? "⏹ Stopp" : "🎙️ Notat"}
-      </button>
-      {audioClip && (
-        <>
-          <button onClick={() => { const a = audioRef.current; a && a.paused ? a.play() : a.pause(); }}
-            style={{padding:"6px 8px",borderRadius:6,fontSize:12,background:"#e8f5e9",color:"#2e7d32"}}>▶️</button>
-          <button onClick={onDelete}
-            style={{padding:"6px 8px",borderRadius:6,fontSize:12,background:"#fef5f5",color:"#c62828"}}>🗑</button>
-          <audio ref={audioRef} src={audioClip} />
-        </>
-      )}
+    <div style={{display:"flex",alignItems:"center",gap:4}}>
+      <button onClick={toggle} style={{padding:"5px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:recording?YX_RED:"#f0ede5",color:recording?"#fff":"#666",animation:recording?"rec 1s infinite":"none",whiteSpace:"nowrap"}}>{recording?"⏹ Stopp":"🎙️"}</button>
+      {clip&&<><button onClick={()=>{const a=aRef.current;a&&a.paused?a.play():a.pause();}} style={{padding:"4px 6px",borderRadius:4,fontSize:11,background:"#e8f5e9",color:"#2e7d32"}}>▶️</button><button onClick={onDelete} style={{padding:"4px 6px",borderRadius:4,fontSize:11,background:"#fef5f5",color:"#c62828"}}>✕</button><audio ref={aRef} src={clip}/></>}
     </div>
   );
 }
 
-/* ── PHOTO COMPONENT ── */
-function PhotoCapture({ photos, onAdd, onRemove }) {
+function PhotoCapture({photos, onAdd, onRemove}) {
   const ref = useRef();
-  const handleFile = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => onAdd(ev.target.result);
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
+  const hf = e => { const f=e.target.files?.[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>onAdd(ev.target.result); r.readAsDataURL(f); e.target.value=""; };
   return (
-    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-      {(photos||[]).map((p,i) => (
-        <div key={i} style={{position:"relative",width:52,height:52,borderRadius:8,overflow:"hidden"}}>
-          <img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}} />
-          <button onClick={()=>onRemove(i)} style={{position:"absolute",top:1,right:1,background:"rgba(0,0,0,.6)",color:"#fff",borderRadius:10,width:18,height:18,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-        </div>
-      ))}
-      <button onClick={()=>ref.current?.click()} style={{width:52,height:52,borderRadius:8,border:"2px dashed #ccc",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontSize:16,color:"#999",background:"#fafaf7"}}>
-        📷
-      </button>
-      <input ref={ref} type="file" accept="image/*" capture="environment" onChange={handleFile} />
+    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>
+      {(photos||[]).map((p,i)=>(<div key={i} style={{position:"relative",width:48,height:48,borderRadius:6,overflow:"hidden"}}><img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}}/><button onClick={()=>onRemove(i)} style={{position:"absolute",top:1,right:1,background:"rgba(0,0,0,.6)",color:"#fff",borderRadius:8,width:16,height:16,fontSize:9,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}
+      <button onClick={()=>ref.current?.click()} style={{width:48,height:48,borderRadius:6,border:"2px dashed #ccc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#999",background:"#fafaf7"}}>📷</button>
+      <input ref={ref} type="file" accept="image/*" capture="environment" onChange={hf}/>
     </div>
   );
 }
 
-/* ── DATA ── */
+/* ── CAMPAIGN DATA (K-5, uke 17-20) ── */
+const CAMPAIGN = {
+  period: "K-5 · Uke 17–20",
+  items: [
+    {type:"A",name:"Boller 3pk",price:"3 for 39,-",placement:"1b + 2b + 3",note:"Hveteboller, Rosinboller, Sjokoladeboller. Nye bolleposer fra Kolly."},
+    {type:"B",name:"Uslåelig Burger",price:"",placement:"1b + 2b + 3",note:"Nytt burgerkonsept: Bacon Krønsj, Biff & Biff, YX Spesial. Burgerhefte på Happeo."},
+    {type:"Drikke",name:"Coca-Cola 0,5l",price:"2 for 55,- (+pant)",placement:"Cling-filmer, A4 plakater",note:"Frivillig. Aksepter i Shop24."},
+    {type:"Drikke",name:"Monster/Burn/Powerade 0,5l",price:"2 for 65,- (+pant)",placement:"Cling-filmer, A4 plakater",note:"Frivillig. Aksepter i Shop24."},
+    {type:"Drikke",name:"Red Bull 250ml",price:"2 for 49,- (+pant)",placement:"Cling-film, A4 plakat",note:"Frivillig. 10% fakturarabatt."},
+    {type:"Kiosk",name:"Kick (Lemon/Original/Seasalt)",price:"2 for 15,-",placement:"Diskdisplay",note:"Auto på kassen."},
+    {type:"Kiosk",name:"Mars sjokolade (Snickers/Twix/Bounty)",price:"2 for 39,-",placement:"Endereol hylle 1-2",note:"Auto på kassen."},
+    {type:"Kiosk",name:"KIMS 80g",price:"2 for 40,-",placement:"Endereol hylle 3",note:"Auto på kassen."},
+    {type:"Tilbehør",name:"Vestlandslefsa",price:"Kr 15,-",placement:"Ved kaffemaskin/kasse",note:"Frivillig. Display fra Baxt."},
+    {type:"Is",name:"Krone-Is fokus",price:"Kun synlighet",placement:"A4 plakat, stickers",note:"Salgskonkurranse Diplom-Is t.o.m. 18. mai!"},
+    {type:"COOP",name:"Husk bonus",placement:"Vegg plass 4, pumper plass 2a",note:"Videreføring fra K-3/K-4. Bruk eksisterende materiell."},
+  ]
+};
+
+/* ── RFC DATA ── */
 const RFC = [
   { id:"uteomrade", name:"Uteområde", icon:"🏪",
     intro:"Førsteinntrykket. Det kunden ser før de bestemmer seg for å stoppe.",
     items:[
       {id:1, text:"Uthevet inn- og utkjøring, skilting for utkjøring godt synlig ved adkomst og påfyllingspunkter", talk:"Hvordan oppleves innkjøringen fra kundenes side?", max:5},
-      {id:2, text:"Uteområdet ryddet for søppel og ugress. Dekke fritt for olje og søl. Avløpskanaler og oppsamlere rene med fritt løp og lokk på plass", talk:"Hvem har ansvar for uterunden i løpet av dagen?", max:5},
-      {id:3, text:"Alt lys på utsiden, pumpetakbelysningen og stasjonsbelysningen fungerer og er tent etter mørkets frembrudd", talk:"Har dere fast sjekk av belysning, spesielt vinterstid?", max:5},
-      {id:4, text:"Grøntområder velstelte og fri for søppel. Ingen ugress eller døde planter. Ytre gjerder fri for graffiti", talk:"Hvor ofte gjennomføres vedlikehold av grøntområder?", max:1},
+      {id:2, text:"Uteområdet ryddet for søppel og ugress. Dekke fritt for olje og søl. Avløpskanaler rene med fritt løp og lokk", talk:"Hvem har ansvar for uterunden i løpet av dagen?", max:5},
+      {id:3, text:"Alt lys ute, pumpetak og stasjonsbelysning fungerer og tent etter mørkets frembrudd", talk:"Har dere fast sjekk av belysning, spesielt vinterstid?", max:5},
+      {id:4, text:"Grøntområder velstelte og fri for søppel. Ingen ugress eller døde planter. Gjerder fri for graffiti", talk:"Hvor ofte gjennomføres vedlikehold av grøntområder?", max:1},
       {id:5, text:"Pumpetak rent, uten skader, uten avskallende maling. Nattlys og minibanker fungerer", talk:"Når ble pumpetaket sist vurdert for vedlikehold?", max:2},
-      {id:6, text:"Kun YX-godkjente reklamestativer på uteområdet. Alle plakatrammer inneholder gjeldende materiale iht. markedsføringsplan", talk:"Hvem sjekker at kampanjemateriell er korrekt rigget?", max:2},
-      {id:7, text:"Skilting ren og uten skader. Ingen skilter sprekker, lysskilt fungerer", talk:"Har dere rutine for å melde inn skadet skilting?", max:2},
-      {id:8, text:"Toaletter rene, velstelte, luktfrie og fungerer som de skal. Lys fungerer", talk:"Hvor ofte sjekkes toalettet i løpet av en dag?", max:5},
-      {id:9, text:"Pumpeøyene fri for søppel og dekke fritt for olje og søl. Søppelbeholdere ikke fulle eller overfylte", talk:"Har dere fast rutine for tømming og plukking på pumpeøy?", max:2},
+      {id:6, text:"Kun YX-godkjente reklamestativer. Alle plakatrammer har gjeldende materiale iht. markedsplan", talk:"Hvem sjekker at kampanjemateriell er riktig rigget?", max:2},
+      {id:7, text:"Skilting ren og uten skader. Lysskilt fungerer", talk:"Har dere rutine for å melde inn skadet skilting?", max:2},
+      {id:8, text:"Toaletter rene, velstelte, luktfrie og fungerer. Lys fungerer", talk:"Hvor ofte sjekkes toalettet i løpet av en dag?", max:5},
+      {id:9, text:"Pumpeøyene fri for søppel, dekke fritt for olje/søl. Søppelbeholdere ikke overfylte", talk:"Fast rutine for tømming og plukking på pumpeøy?", max:2},
     ]},
   { id:"tanking", name:"Tanking", icon:"⛽",
     intro:"Kunden står her i 3–5 minutter. Alt de ser teller.",
     items:[
-      {id:14, text:"Alle pumper fungerer som de skal", talk:"Hva gjør dere når en pumpe feiler? Hvem meldes det til?", max:5},
-      {id:15, text:"Tydelige, lesbare retningslinjer for pumpebruk. Produktbetegnelser over tappepistoler. Pumper ute av drift har godkjent skilt", talk:"Finnes det enhetlig ute-av-drift-skilt tilgjengelig?", max:2},
-      {id:16, text:"Tappepistoler, håndtak, slanger uten skade. Alle tappepistoler har sprutsikring", talk:"Hvordan dokumenteres feil på tankeutstyr?", max:2},
-      {id:17, text:"Pumper og tappepistolhåndtak rene og fri for flekker. Hansker tilgjengelig for dieselkunder", talk:"Hvem rengjør pumpene, og hvor ofte?", max:2},
-      {id:18, text:"Nål, rent vann, radiatorvannkanne, tørkepapir og søppelkasse ved hver pumpeøy", talk:"Sjekkes forbruksmateriell daglig ved hver pumpeøy?", max:2},
-      {id:19, text:"Klart synlige sikkerhetsskilt lesbare fra alle påfyllingsposisjoner. Rene, uten skade, ikke falmet", talk:"Når ble sikkerhetsmerkingen sist gjennomgått?", max:2},
-      {id:20, text:"Brannslukningsapparater tilgjengelige, fulle og innenfor utløpsdato. Synlige fra alle påfyllingsposisjoner", talk:"Hvem har ansvar for månedlig brannutstyrssjekk?", max:2},
-      {id:21, text:"Betaling ved pumpe — skilt og retningslinjer tydelige, utstyr fungerer iht. standard", talk:"Hvordan løser dere betalingsproblemer ute på pumpene?", max:2},
+      {id:14, text:"Alle pumper fungerer som de skal", talk:"Hva gjør dere når en pumpe feiler?", max:5},
+      {id:15, text:"Lesbare retningslinjer for pumpebruk. Produktbetegnelser over tappepistoler. Ute-av-drift-skilt på defekte pumper", talk:"Finnes enhetlig ute-av-drift-skilt?", max:2},
+      {id:16, text:"Tappepistoler, håndtak, slanger uten skade. Sprutsikring på alle", talk:"Hvordan dokumenteres feil på tankeutstyr?", max:2},
+      {id:17, text:"Pumper og håndtak rene, fri for flekker. Hansker til dieselkunder", talk:"Hvem rengjør pumpene, og hvor ofte?", max:2},
+      {id:18, text:"Nål, rent vann, radiatorvannkanne, tørkepapir og søppelkasse ved hver pumpeøy", talk:"Sjekkes forbruksmateriell daglig?", max:2},
+      {id:19, text:"Synlige sikkerhetsskilt lesbare fra alle påfyllingsposisjoner. Rene, uten skade, ikke falmet", talk:"Når ble sikkerhetsmerkingen sist gjennomgått?", max:2},
+      {id:20, text:"Brannslukkere tilgjengelige, fulle, innenfor utløpsdato. Synlige fra alle posisjoner", talk:"Hvem har månedlig brannutstyrssjekk?", max:2},
+      {id:21, text:"Betaling ved pumpe — skilt tydelige, utstyr fungerer iht. standard", talk:"Hvordan løses betalingsproblemer ute?", max:2},
     ]},
   { id:"butikk", name:"Butikk", icon:"🛒",
     intro:"Kunden skal finne det de leter etter — og oppdage noe nytt.",
+    campaign: true,
     items:[
-      {id:22, text:"Inngangsparti, gangveier, ramper og baksidegård rene og fri for søppel og hindringer", talk:"Hvem har ansvar for inngangssonen?", max:2},
-      {id:23, text:"Fasade, vinduer og dører rene, uten graffiti, merker/flekker, ingen avskallende maling", talk:"Når ble fasaden sist vurdert?", max:2},
-      {id:24, text:"Dører og vinduer fungerer og er uten skade", talk:"Hvordan meldes skader inn til drift?", max:1},
-      {id:25, text:"Butikkgulv, vegger og tak rene. Ingen søppel. Gulvmatter rene, ingen merker eller flekker", talk:"Har dere fast rutine for gulvrunde?", max:1},
-      {id:26, text:"Alt lys i butikklokalet fungerer og er tent", talk:"Hvem bytter pærer og melder inn defekter?", max:1},
-      {id:27, text:"Alle kjøleskap og frysere er slått på og fungerer", talk:"Daglig temperaturkontroll — hvem har ansvar?", max:2},
-      {id:28, text:"Alle reoler, hyller, kjøleskap og frysere rene. Produkter rene og sortert", talk:"Hvordan sikrer dere at hyllene er fulle og ryddige?", max:1},
-      {id:29, text:"Butikkplanogram og oversiktsplan implementert", talk:"Hvem har ansvar for planogramsjekk?", max:1},
-      {id:30, text:"Priser klart angitt på produkter eller reoler/hyller med godkjente skilt", talk:"Hvor ofte sjekker dere priser mot kasse?", max:1},
-      {id:31, text:"Markedsføringsmateriell plassert iht. planogram. Tilstrekkelig varebeholdning for kampanje. Uhindret siktlinje inn i butikken", talk:"Hvordan kommuniseres kampanjer internt?", max:2},
-      {id:32, text:"Alle kjernekategorier representert og de 5 mestselgende artiklene på lager (se OU-liste). Produkter fra godkjente leverandører", talk:"Følger dere OU-lista aktivt?", max:5},
-      {id:33, text:"Utvalg av smøremidler i butikken, plassert iht. planogram. Ingen smøremidler utsolgt", talk:"Hvordan håndterer dere smøremiddelsortimentet?", max:5},
-      {id:35, text:"Ingen butikkprodukter er utløpt. Varelager følges, eldste datoer fremst. Produkter oppbevares ikke på gulvet", talk:"Hvem har ansvar for datosjekk?", max:2},
-      {id:36, text:"Utstyr for varm mat og drikke fungerer og er slått på. Områder rene. YX matvaresikkerhetsrutiner følges", talk:"Hvordan trener dere nye på matvaresikkerhet?", max:2},
-      {id:37, text:"Registrering av daglig rengjøring. Regelmessig registrering av temperaturer. Tidspunkt innfylt", talk:"Vises renholdsloggen tydelig?", max:2},
-      {id:38, text:"Alle rømningsveier fri for hindringer og tydelig merket", talk:"Sjekkes rømningsveier daglig?", max:2},
-      {id:39, text:"Disken er ikke overfylt, men ren og ryddig", talk:"Når ble kassesonen sist ryddet ordentlig?", max:1},
-      {id:40, text:"Bestillingsskjemaer for kreditt, lojalitets- og drivstoffkort tilgjengelige ved disken. Alle anviste betalingsformer godtas", talk:"Hvordan introduserer dere YX-appen for kunder?", max:2},
-      {id:41, text:"Butikkansatte godtar alle vanlige betalingsmetoder som YX har anvist", talk:"Er det betalingsformer som ofte skaper friksjon?", max:2},
+      {id:22, text:"Inngangsparti, gangveier, ramper rene og fri for søppel og hindringer", talk:"Hvem har ansvar for inngangssonen?", max:2},
+      {id:23, text:"Fasade, vinduer og dører rene, uten graffiti/flekker, ingen avskallende maling", talk:"Når ble fasaden sist vurdert?", max:2},
+      {id:24, text:"Dører og vinduer fungerer og er uten skade", talk:"Hvordan meldes skader til drift?", max:1},
+      {id:25, text:"Gulv, vegger og tak rene. Gulvmatter rene, ingen merker", talk:"Fast rutine for gulvrunde?", max:1},
+      {id:26, text:"Alt lys i butikklokalet fungerer og er tent", talk:"Hvem melder defekter?", max:1},
+      {id:27, text:"Alle kjøleskap og frysere slått på og fungerer", talk:"Daglig temperaturkontroll — hvem?", max:2},
+      {id:28, text:"Reoler, hyller, kjøl og frys rene. Produkter rene og sortert", talk:"Hvordan sikrer dere fulle hyller?", max:1},
+      {id:29, text:"Butikkplanogram og oversiktsplan implementert", talk:"Hvem har planogramsjekk?", max:1},
+      {id:30, text:"Priser klart angitt med godkjente skilt", talk:"Hvor ofte sjekkes priser mot kasse?", max:1},
+      {id:31, text:"Markedsføringsmateriell iht. planogram. Tilstrekkelig varer for kampanje. Uhindret siktlinje inn", talk:"Hvordan kommuniseres kampanjer internt?", max:2},
+      {id:32, text:"Alle kjernekategorier representert, de 5 mestselgende på lager (OU-liste). Godkjente leverandører", talk:"Følger dere OU-lista aktivt?", max:5},
+      {id:33, text:"Smøremidler i butikken iht. planogram. Ingen utsolgt", talk:"Hvordan håndteres smøremiddelsortimentet?", max:5},
+      {id:35, text:"Ingen utløpte produkter. Eldste datoer fremst. Ikke på gulvet", talk:"Hvem har ansvar for datosjekk?", max:2},
+      {id:36, text:"Varmmat/drikke-utstyr fungerer og er på. Rene områder. YX matvaresikkerhetsrutiner følges", talk:"Hvordan trenes nye på matvaresikkerhet?", max:2},
+      {id:37, text:"Daglig rengjøring registrert. Temperaturer registrert. Tidspunkt innfylt", talk:"Vises renholdsloggen tydelig?", max:2},
+      {id:38, text:"Alle rømningsveier frie og tydelig merket", talk:"Sjekkes rømningsveier daglig?", max:2},
+      {id:39, text:"Disk ikke overfylt, ren og ryddig", talk:"Når ble kassesonen sist ryddet?", max:1},
+      {id:40, text:"Skjemaer for kreditt/lojalitet/drivstoffkort ved disk. Alle betalingsformer godtas", talk:"Hvordan introduseres YX-appen?", max:2},
+      {id:41, text:"Ansatte godtar alle betalingsmetoder YX har anvist", talk:"Betalingsformer som skaper friksjon?", max:2},
     ]},
   { id:"butikkservice", name:"Butikkservice", icon:"👥",
     intro:"Det siste møtet. Kundens siste inntrykk.",
     items:[
-      {id:42, text:"Butikkansatte rene, velstelte, i godkjent uniform med navneskilt, og står rett (vendt mot kunden)", talk:"Hvordan følger dere opp uniformskrav i praksis?", max:5},
-      {id:43, text:"Butikkansatte er høflige — hilser, takker, øyekontakt, smiler, viser at de har sett kunden i kø. Kompetente og hjelpsomme", talk:"Hvilke mersalgsfraser funker best hos dere?", max:5},
-      {id:44, text:"Butikkansatte behandler betalingen korrekt, gir kvittering og riktig vekslebeløp", talk:"Hvordan trener dere på kassehåndtering?", max:5},
+      {id:42, text:"Ansatte rene, velstelte, godkjent uniform med navneskilt, vendt mot kunden", talk:"Hvordan følges uniformskrav opp?", max:5},
+      {id:43, text:"Ansatte hilser, takker, øyekontakt, smiler, ser kunden i kø. Kompetente og hjelpsomme", talk:"Hvilke mersalgsfraser funker best?", max:5},
+      {id:44, text:"Betaling håndteres korrekt, kvittering og riktig vekslebeløp", talk:"Hvordan trenes kassehåndtering?", max:5},
     ]},
 ];
 
 const MAX_TOTAL = RFC.reduce((s,c) => s + c.items.reduce((a,b) => a+b.max, 0), 0);
 const STATIONS = [{id:"s001",name:"YX Tønsberg"},{id:"s002",name:"YX Horten"},{id:"s003",name:"YX Sandefjord"},{id:"s004",name:"YX Larvik"},{id:"s005",name:"YX Brokelandsheia"},{id:"s006",name:"YX Sande"},{id:"s007",name:"YX Øvre Årdal"},{id:"s008",name:"YX Drammen"}];
-const KEY = "yx_kfk_v4";
-const load = () => { try { return JSON.parse(localStorage.getItem(KEY)||"[]"); } catch { return []; } };
-const save = (v) => localStorage.setItem(KEY, JSON.stringify(v));
-const sc = (p) => p>=85?"#16a34a":p>=70?"#84cc16":p>=55?"#eab308":p>=40?"#f97316":"#dc2626";
-const sl = (p) => p>=85?"Utmerket":p>=70?"Godt":p>=55?"OK":p>=40?"Trenger oppfølging":"Kritisk";
+
+/* ── STORAGE: separate keys for self-eval and RS visits ── */
+const KEYS = { sl: "yx_kfk_sl", rs: "yx_kfk_rs" };
+const load = (role) => { try { return JSON.parse(localStorage.getItem(KEYS[role]||KEYS.rs)||"[]"); } catch { return []; } };
+const save = (role, v) => localStorage.setItem(KEYS[role]||KEYS.rs, JSON.stringify(v));
+const loadAll = () => [...load("sl"), ...load("rs")].sort((a,b) => b.id - a.id);
+
+const sc = p => p>=85?"#16a34a":p>=70?"#84cc16":p>=55?"#eab308":p>=40?"#f97316":"#dc2626";
+const sl = p => p>=85?"Utmerket":p>=70?"Godt":p>=55?"OK":p>=40?"Trenger oppfølging":"Kritisk";
 
 function App() {
   const [view, setView] = useState("splash");
@@ -220,23 +187,32 @@ function App() {
   const [photos, setPhotos] = useState({});
   const [audio, setAudio] = useState({});
   const [visitNote, setVisitNote] = useState("");
-  const [visits, setVisits] = useState(load());
+  const [showCampaign, setShowCampaign] = useState(false);
+
+  // Load visits for current role
+  const allVisits = loadAll();
+  const slVisits = load("sl");
+  const rsVisits = load("rs");
 
   useEffect(() => { const t = setTimeout(() => view==="splash" && setView("roles"), 1800); return () => clearTimeout(t); }, []);
 
   const totalScore = Object.values(scores).reduce((s,v) => s+(v||0), 0);
   const totalPct = Math.round(totalScore / MAX_TOTAL * 100);
   const photoCount = Object.values(photos).reduce((s,a) => s+(a?.length||0), 0);
-  const audioCount = Object.values(audio).filter(Boolean).length;
+
+  // Get latest self-evaluation for a station
+  const getSelfEval = (stationId) => slVisits.find(v => v.stationId === stationId);
 
   const submit = () => {
     const visit = {id:Date.now(),stationId:station.id,stationName:station.name,role,date:new Date().toISOString(),
-      scores:{...scores},notes:{...notes},visitNote,photoCount,audioCount,
+      scores:{...scores},notes:{...notes},visitNote,photoCount,
       total:totalScore,max:MAX_TOTAL,pct:totalPct};
-    const u = [visit,...visits]; setVisits(u); save(u);
+    const current = load(role);
+    const u = [visit,...current]; save(role, u);
     setScores({}); setNotes({}); setPhotos({}); setAudio({}); setVisitNote(""); setCatIdx(0); setView("done");
   };
 
+  /* ── SPLASH ── */
   if (view==="splash") return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:YX_DARK}}>
       <img src={LOGO_W} alt="YX" style={{height:90,marginBottom:16}} />
@@ -245,44 +221,63 @@ function App() {
     </div>
   );
 
+  /* ── ROLES ── */
   if (view==="roles") return (
     <div style={{padding:"48px 24px",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
       <img src={LOGO_C} alt="YX" style={{height:56,alignSelf:"flex-start",marginBottom:8}} />
       <h1 style={{fontSize:24,fontWeight:800,margin:"6px 0 4px",color:YX_DARK}}>Klar for Kunde</h1>
       <p style={{fontSize:14,color:"#777",marginBottom:36}}>RFC — stasjonsbesøk og selvevaluering</p>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
-        {[{k:"sl",e:"🏪",n:"Stasjonsleder",d:"Selvevaluering"},{k:"rs",e:"📋",n:"Regionssjef",d:"Coaching-besøk"},{k:"leder",e:"📊",n:"Lederdashboard",d:"Oversikt og historikk"}].map(r=>(
+        {[{k:"sl",e:"🏪",n:"Stasjonsleder",d:"Selvevaluering — forbered besøket"},{k:"rs",e:"📋",n:"Regionssjef",d:"Coaching-besøk — se stasjonens egenvurdering"},{k:"leder",e:"📊",n:"Lederdashboard",d:"Oversikt, gap-analyse og historikk"}].map(r=>(
           <button key={r.k} onClick={()=>{setRole(r.k);setView(r.k==="leder"?"dash":"home");}} style={{background:"#fff",border:"2px solid #eae7df",borderRadius:16,padding:"22px 20px",textAlign:"left",display:"flex",alignItems:"center",gap:16}}>
             <span style={{fontSize:32}}>{r.e}</span>
             <div><div style={{fontWeight:700,fontSize:17,color:YX_DARK}}>{r.n}</div><div style={{fontSize:13,color:"#888",marginTop:2}}>{r.d}</div></div>
           </button>
         ))}
       </div>
-      <div style={{marginTop:"auto",paddingTop:40,fontSize:11,color:"#bbb",textAlign:"center"}}>YX Norge AS · v4</div>
+      <div style={{marginTop:"auto",paddingTop:40,fontSize:11,color:"#bbb",textAlign:"center"}}>YX Norge AS · v5</div>
     </div>
   );
 
+  /* ── HOME ── */
   if (view==="home") return (
     <div style={{padding:"20px 20px 40px"}}>
       <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
         <button onClick={()=>setView("roles")} style={{fontSize:15,color:"#666",padding:"6px 0"}}>← Tilbake</button>
         <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:YX_RED}}>{role==="rs"?"Regionssjef":"Stasjonsleder"}</div>
       </div>
-      <h2 style={{fontSize:20,fontWeight:800,margin:"20px 0 12px",color:YX_DARK}}>Velg stasjon</h2>
+      <h2 style={{fontSize:20,fontWeight:800,margin:"20px 0 4px",color:YX_DARK}}>Velg stasjon</h2>
+      {role==="rs"&&<p style={{fontSize:12,color:"#888",marginBottom:12}}>Stasjonslederens egenvurdering vises under inspeksjonen</p>}
+      {role==="sl"&&<p style={{fontSize:12,color:"#888",marginBottom:12}}>Fyll ut egenvurdering før regionsjefens besøk</p>}
       <div style={{display:"flex",flexDirection:"column",gap:8}}>
-        {STATIONS.map(s=>{const last=visits.find(v=>v.stationId===s.id);return(
-          <button key={s.id} onClick={()=>{setStation(s);setView("audit");}} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"16px",display:"flex",alignItems:"center",justifyContent:"space-between",textAlign:"left"}}>
-            <div><div style={{fontWeight:600,fontSize:15,color:YX_DARK}}>{s.name}</div><div style={{fontSize:12,color:"#999",marginTop:2}}>{last?`Sist: ${new Date(last.date).toLocaleDateString("nb-NO")}`:"Aldri besøkt"}</div></div>
-            {last&&<div style={{background:sc(last.pct),color:"#fff",padding:"4px 10px",borderRadius:8,fontSize:13,fontWeight:700}}>{last.pct}%</div>}
-          </button>
-        );})}
+        {STATIONS.map(s=>{
+          const myVisits = (role==="rs"?rsVisits:slVisits).filter(v=>v.stationId===s.id);
+          const last = myVisits[0];
+          const selfEval = getSelfEval(s.id);
+          return (
+            <button key={s.id} onClick={()=>{setStation(s);setView("audit");}} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px 16px",textAlign:"left"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontWeight:600,fontSize:15,color:YX_DARK}}>{s.name}</div>
+                {last&&<div style={{background:sc(last.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:12,fontWeight:700}}>{last.pct}%</div>}
+              </div>
+              <div style={{display:"flex",gap:8,marginTop:4,fontSize:11,color:"#999"}}>
+                {last&&<span>Sist: {new Date(last.date).toLocaleDateString("nb-NO")}</span>}
+                {role==="rs"&&selfEval&&<span style={{color:"#0B326B"}}>📋 Egenvurdering: {selfEval.pct}%</span>}
+                {role==="rs"&&!selfEval&&<span style={{color:"#ccc"}}>Ingen egenvurdering</span>}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 
+  /* ── AUDIT ── */
   if (view==="audit"&&station) {
     const cat=RFC[catIdx], catMax=cat.items.reduce((s,i)=>s+i.max,0), catScore=cat.items.reduce((s,i)=>s+(scores[i.id]||0),0);
     const isLast = catIdx===RFC.length-1;
+    const selfEval = role==="rs" ? getSelfEval(station.id) : null;
+
     return (
       <div style={{paddingBottom:120}}>
         <div style={{background:YX_DARK,color:"#fff",padding:"14px 18px",position:"sticky",top:0,zIndex:10}}>
@@ -290,7 +285,6 @@ function App() {
             <button onClick={()=>setView("home")} style={{color:"#aaa",fontSize:13}}>← Avbryt</button>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               {photoCount>0&&<span style={{fontSize:11,color:"#7799bb"}}>📷{photoCount}</span>}
-              {audioCount>0&&<span style={{fontSize:11,color:"#7799bb"}}>🎙️{audioCount}</span>}
               <span style={{fontSize:11,color:"#7799bb"}}>{catIdx+1}/{RFC.length}</span>
             </div>
           </div>
@@ -300,97 +294,194 @@ function App() {
             <div style={{height:"100%",background:YX_RED,width:`${(catIdx+1)/RFC.length*100}%`,transition:"width .3s"}}/>
           </div>
         </div>
-        <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:12}}>
-          {cat.items.map(item=>{
-            const val=scores[item.id]??null;
-            const labels = LABELS[item.max] || LABELS[5];
-            return(
-            <div key={item.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px"}}>
-              <div style={{fontSize:14,fontWeight:600,marginBottom:10,color:YX_DARK}}>{item.text}</div>
-              <div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap"}}>
-                {labels.map(lb=>(
-                  <button key={lb.v} onClick={()=>setScores(s=>({...s,[item.id]:lb.v}))}
-                    style={{flex:"1 1 0",minWidth:0,padding:"8px 4px",borderRadius:8,
-                      background:val===lb.v?lb.c:"#f5f3ee",
-                      color:val===lb.v?"#fff":"#666",
-                      fontSize:11,fontWeight:700,lineHeight:1.2,textAlign:"center"}}>
-                    {lb.l}
-                  </button>
+
+        {/* Campaign reference for Butikk category */}
+        {cat.campaign && (
+          <div style={{margin:"12px 16px 0",background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 12px"}}>
+            <button onClick={()=>setShowCampaign(!showCampaign)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>📢 {CAMPAIGN.period}</span>
+              <span style={{fontSize:12,color:"#b45309"}}>{showCampaign?"▲ Skjul":"▼ Vis kampanjer"}</span>
+            </button>
+            {showCampaign&&(
+              <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+                {CAMPAIGN.items.map((c,i)=>(
+                  <div key={i} style={{fontSize:12,padding:"6px 0",borderTop:i?"1px solid #fef3c7":"none"}}>
+                    <div style={{display:"flex",justifyContent:"space-between"}}>
+                      <span style={{fontWeight:600,color:"#78350f"}}>{c.name}</span>
+                      {c.price&&<span style={{fontWeight:700,color:"#dc2626"}}>{c.price}</span>}
+                    </div>
+                    <div style={{color:"#92400e",fontSize:11}}>📍 {c.placement}</div>
+                    {c.note&&<div style={{color:"#a16207",fontSize:10,marginTop:2}}>{c.note}</div>}
+                  </div>
                 ))}
               </div>
-              {role==="rs"&&<div style={{background:"#fef5f5",borderLeft:`3px solid ${YX_RED}`,padding:"8px 10px",borderRadius:4,fontSize:12,color:"#555",marginBottom:6}}>💬 {item.talk}</div>}
-              <div style={{display:"flex",alignItems:"flex-start",gap:6,marginTop:4}}>
-                <textarea placeholder="Notat (valgfritt)" value={notes[item.id]||""} onChange={e=>setNotes(n=>({...n,[item.id]:e.target.value}))}
-                  style={{flex:1,minHeight:36,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:13,color:"#444",background:"#fafaf7"}}/>
-                <AudioBtn audioClip={audio[item.id]} onRecord={(d)=>setAudio(a=>({...a,[item.id]:d}))} onDelete={()=>setAudio(a=>({...a,[item.id]:null}))} />
+            )}
+          </div>
+        )}
+
+        <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
+          {cat.items.map(item=>{
+            const val = scores[item.id] ?? null;
+            const labels = LABELS[item.max]||LABELS[5];
+            const selfScore = selfEval?.scores?.[item.id];
+            const selfLabel = selfScore!==undefined ? labelFor(item.max, selfScore) : null;
+            const myLabel = val!==null ? labelFor(item.max, val) : null;
+            const hasGap = role==="rs" && selfLabel && myLabel && selfLabel.v !== myLabel.v;
+
+            return (
+              <div key={item.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"12px"}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:YX_DARK,lineHeight:1.35}}>{item.text}</div>
+
+                {/* Self-evaluation reference for RS */}
+                {role==="rs"&&selfLabel&&(
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,padding:"5px 8px",background:"#f0f7ff",borderRadius:6}}>
+                    <span style={{fontSize:11,color:"#555"}}>Stasjonens vurdering:</span>
+                    <span className="gap-badge" style={{background:selfLabel.c+"22",color:selfLabel.c}}>{selfLabel.l}</span>
+                  </div>
+                )}
+                {role==="rs"&&!selfLabel&&selfEval&&(
+                  <div style={{fontSize:10,color:"#bbb",marginBottom:6,fontStyle:"italic"}}>Ikke vurdert av stasjonen</div>
+                )}
+
+                {/* Score buttons */}
+                <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
+                  {labels.map(lb=>(
+                    <button key={lb.v} onClick={()=>setScores(s=>({...s,[item.id]:lb.v}))}
+                      style={{flex:"1 1 0",minWidth:0,padding:"7px 3px",borderRadius:7,
+                        background:val===lb.v?lb.c:"#f5f3ee",color:val===lb.v?"#fff":"#777",
+                        fontSize:10,fontWeight:700,lineHeight:1.2,textAlign:"center",
+                        border:val===lb.v?"none":"1px solid #eae7df"}}>
+                      {lb.l}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Gap indicator */}
+                {hasGap&&(
+                  <div style={{fontSize:11,padding:"4px 8px",borderRadius:4,marginBottom:6,
+                    background: myLabel.v < selfLabel.v ? "#fef2f2" : "#f0fdf4",
+                    color: myLabel.v < selfLabel.v ? "#991b1b" : "#166534"}}>
+                    {myLabel.v < selfLabel.v
+                      ? `⚠️ Gap: stasjonen sier "${selfLabel.l}", du sier "${myLabel.l}"`
+                      : `✅ Du vurderer høyere enn stasjonen`}
+                  </div>
+                )}
+
+                {/* Coaching talking point */}
+                {role==="rs"&&<div style={{background:"#fef5f5",borderLeft:`3px solid ${YX_RED}`,padding:"6px 8px",borderRadius:4,fontSize:11,color:"#555",marginBottom:4}}>💬 {item.talk}</div>}
+
+                {/* Notes + audio */}
+                <div style={{display:"flex",alignItems:"flex-start",gap:4,marginTop:4}}>
+                  <textarea placeholder="Notat" value={notes[item.id]||""} onChange={e=>setNotes(n=>({...n,[item.id]:e.target.value}))}
+                    style={{flex:1,minHeight:32,border:"1px solid #f0ede5",borderRadius:6,padding:"6px 8px",fontSize:12,color:"#444",background:"#fafaf7"}}/>
+                  <AudioBtn clip={audio[item.id]} onRecord={d=>setAudio(a=>({...a,[item.id]:d}))} onDelete={()=>setAudio(a=>({...a,[item.id]:null}))}/>
+                </div>
+
+                {/* Photos */}
+                <PhotoCapture photos={photos[item.id]||[]} onAdd={d=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),d]}))} onRemove={idx=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}/>
               </div>
-              <PhotoCapture
-                photos={photos[item.id]||[]}
-                onAdd={(data)=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),data]}))}
-                onRemove={(idx)=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}
-              />
-            </div>
-          );})}
+            );
+          })}
 
           {isLast&&(
-            <div style={{background:"#fff",border:"2px solid #eae7df",borderRadius:12,padding:"14px",marginTop:8}}>
-              <div style={{fontSize:14,fontWeight:700,color:YX_DARK,marginBottom:8}}>📝 Oppsummering av besøket</div>
-              <textarea placeholder="Avtaler, oppfølgingspunkter, generelle observasjoner..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
-                style={{width:"100%",minHeight:80,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:13,color:"#444",background:"#fafaf7"}}/>
+            <div style={{background:"#fff",border:"2px solid #eae7df",borderRadius:12,padding:"12px",marginTop:6}}>
+              <div style={{fontSize:13,fontWeight:700,color:YX_DARK,marginBottom:6}}>📝 Oppsummering</div>
+              <textarea placeholder="Avtaler, oppfølgingspunkter, observasjoner..." value={visitNote} onChange={e=>setVisitNote(e.target.value)}
+                style={{width:"100%",minHeight:70,border:"1px solid #f0ede5",borderRadius:6,padding:"8px",fontSize:12,color:"#444",background:"#fafaf7"}}/>
             </div>
           )}
         </div>
-        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",padding:"12px 16px",maxWidth:480,margin:"0 auto"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,fontSize:12,color:"#666"}}>
-            <span>Kategori: {catScore}/{catMax}</span><span>Total: {totalScore}/{MAX_TOTAL} ({totalPct}%)</span>
+
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",padding:"10px 16px",maxWidth:480,margin:"0 auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,fontSize:12,color:"#666"}}>
+            <span>{catScore}/{catMax}</span>
+            {selfEval&&role==="rs"&&<span style={{color:"#0B326B"}}>Stasjon: {selfEval.pct}%</span>}
+            <span style={{fontWeight:700}}>Din: {totalScore}/{MAX_TOTAL} ({totalPct}%)</span>
           </div>
           <div style={{display:"flex",gap:8}}>
-            {catIdx>0&&<button onClick={()=>setCatIdx(i=>i-1)} style={{flex:1,padding:"14px",background:"#f5f3ee",borderRadius:10,fontWeight:600,color:"#444"}}>← Forrige</button>}
-            {!isLast?<button onClick={()=>setCatIdx(i=>i+1)} style={{flex:2,padding:"14px",background:YX_DARK,color:"#fff",borderRadius:10,fontWeight:700}}>Neste →</button>
-            :<button onClick={submit} style={{flex:2,padding:"14px",background:YX_RED,color:"#fff",borderRadius:10,fontWeight:800}}>Fullfør besøk ✓</button>}
+            {catIdx>0&&<button onClick={()=>setCatIdx(i=>i-1)} style={{flex:1,padding:"13px",background:"#f5f3ee",borderRadius:10,fontWeight:600,color:"#444",fontSize:14}}>←</button>}
+            {!isLast?<button onClick={()=>setCatIdx(i=>i+1)} style={{flex:2,padding:"13px",background:YX_DARK,color:"#fff",borderRadius:10,fontWeight:700,fontSize:14}}>Neste →</button>
+            :<button onClick={submit} style={{flex:2,padding:"13px",background:YX_RED,color:"#fff",borderRadius:10,fontWeight:800,fontSize:14}}>Fullfør ✓</button>}
           </div>
         </div>
       </div>
     );
   }
 
-  if (view==="done") {const v=visits[0];return(
-    <div style={{padding:"80px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
-      <div style={{width:80,height:80,borderRadius:40,background:sc(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,marginBottom:20}}>✓</div>
-      <div style={{fontSize:13,color:"#888",letterSpacing:1,textTransform:"uppercase"}}>Besøk registrert</div>
-      <div style={{fontSize:22,fontWeight:800,marginTop:6,color:YX_DARK}}>{v.stationName}</div>
-      <div style={{fontSize:64,fontWeight:900,color:sc(v.pct),marginTop:20,lineHeight:1}}>{v.pct}%</div>
-      <div style={{fontSize:14,color:"#666",marginTop:6}}>{sl(v.pct)}</div>
-      <div style={{fontSize:12,color:"#999",marginTop:12,display:"flex",gap:12,justifyContent:"center"}}>
-        {v.photoCount>0&&<span>📷 {v.photoCount} bilder</span>}
-        {v.audioCount>0&&<span>🎙️ {v.audioCount} lydnotater</span>}
-      </div>
-      <button onClick={()=>setView("home")} style={{marginTop:40,padding:"14px 32px",background:YX_DARK,color:"#fff",borderRadius:10,fontWeight:700,fontSize:15}}>Tilbake til stasjoner</button>
-    </div>
-  );}
+  /* ── DONE ── */
+  if (view==="done") {
+    const myVisits = role==="rs"?load("rs"):load("sl");
+    const v = myVisits[0];
+    if(!v) return null;
+    const selfEval = role==="rs" ? getSelfEval(v.stationId) : null;
+    return (
+      <div style={{padding:"60px 24px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center"}}>
+        <div style={{width:80,height:80,borderRadius:40,background:sc(v.pct),color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:42,marginBottom:16}}>✓</div>
+        <div style={{fontSize:12,color:"#888",letterSpacing:1,textTransform:"uppercase"}}>{role==="rs"?"Coaching-besøk registrert":"Selvevaluering registrert"}</div>
+        <div style={{fontSize:22,fontWeight:800,marginTop:6,color:YX_DARK}}>{v.stationName}</div>
+        <div style={{fontSize:56,fontWeight:900,color:sc(v.pct),marginTop:16,lineHeight:1}}>{v.pct}%</div>
+        <div style={{fontSize:14,color:"#666",marginTop:4}}>{sl(v.pct)}</div>
 
+        {role==="rs"&&selfEval&&(
+          <div style={{marginTop:16,padding:"12px 20px",background:"#f0f7ff",borderRadius:10,fontSize:13}}>
+            <div style={{color:"#555"}}>Stasjonens egenvurdering</div>
+            <div style={{fontSize:28,fontWeight:800,color:"#0B326B",marginTop:4}}>{selfEval.pct}%</div>
+            <div style={{fontSize:11,color:"#888",marginTop:4}}>
+              Gap: {Math.abs(v.pct - selfEval.pct)} prosentpoeng
+              {v.pct < selfEval.pct ? " — du vurderer strengere" : v.pct > selfEval.pct ? " — du vurderer mildere" : " — enige!"}
+            </div>
+          </div>
+        )}
+
+        {v.photoCount>0&&<div style={{fontSize:12,color:"#999",marginTop:10}}>📷 {v.photoCount} bilder</div>}
+        <button onClick={()=>setView("home")} style={{marginTop:32,padding:"13px 28px",background:YX_DARK,color:"#fff",borderRadius:10,fontWeight:700,fontSize:14}}>Tilbake</button>
+      </div>
+    );
+  }
+
+  /* ── DASHBOARD ── */
   if (view==="dash") {
-    const bs=STATIONS.map(s=>{const sv=visits.filter(v=>v.stationId===s.id);return{...s,last:sv[0],count:sv.length};}).sort((a,b)=>(a.last?.pct||999)-(b.last?.pct||999));
-    return(
+    const all = loadAll();
+    const bs = STATIONS.map(s=>{
+      const slV = slVisits.filter(v=>v.stationId===s.id);
+      const rsV = rsVisits.filter(v=>v.stationId===s.id);
+      return {...s, slLast:slV[0], rsLast:rsV[0], totalVisits:slV.length+rsV.length};
+    }).sort((a,b)=>{
+      const aP = a.rsLast?.pct ?? a.slLast?.pct ?? 999;
+      const bP = b.rsLast?.pct ?? b.slLast?.pct ?? 999;
+      return aP - bP;
+    });
+
+    return (
       <div style={{padding:"20px 20px 40px"}}>
         <div style={{display:"flex",alignItems:"center",gap:12,paddingTop:8}}>
           <button onClick={()=>setView("roles")} style={{fontSize:15,color:"#666",padding:"6px 0"}}>← Tilbake</button>
           <div style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:YX_RED}}>Lederdashboard</div>
         </div>
-        <div style={{display:"flex",gap:10,margin:"20px 0"}}>
-          {[["Besøk",visits.length],["Stasjoner",new Set(visits.map(v=>v.stationId)).size],["Snitt",visits.length?Math.round(visits.reduce((s,v)=>s+v.pct,0)/visits.length)+"%":"—"]].map(([l,v],i)=>(
-            <div key={i} style={{flex:1,background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"12px 10px",textAlign:"center"}}>
+        <div style={{display:"flex",gap:8,margin:"20px 0"}}>
+          {[["Besøk",all.length],["Stasjoner",new Set(all.map(v=>v.stationId)).size],["Snitt",all.length?Math.round(all.reduce((s,v)=>s+v.pct,0)/all.length)+"%":"—"]].map(([l,v],i)=>(
+            <div key={i} style={{flex:1,background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 8px",textAlign:"center"}}>
               <div style={{fontSize:22,fontWeight:800,color:YX_DARK}}>{v}</div>
-              <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{l}</div>
+              <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:1,marginTop:2}}>{l}</div>
             </div>
           ))}
         </div>
-        <h3 style={{fontSize:14,fontWeight:700,margin:"20px 0 10px",color:YX_DARK,textTransform:"uppercase",letterSpacing:1}}>Stasjoner</h3>
+        <h3 style={{fontSize:13,fontWeight:700,margin:"16px 0 8px",color:YX_DARK,textTransform:"uppercase",letterSpacing:1}}>Stasjoner</h3>
         <div style={{display:"flex",flexDirection:"column",gap:6}}>
           {bs.map(s=>(
-            <div key={s.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontSize:14,fontWeight:600,color:YX_DARK}}>{s.name}</div><div style={{fontSize:11,color:"#999",marginTop:2}}>{s.last?`${new Date(s.last.date).toLocaleDateString("nb-NO")} · ${s.count} besøk`:"Ikke besøkt"}</div></div>
-              {s.last?<div style={{background:sc(s.last.pct),color:"#fff",padding:"4px 10px",borderRadius:6,fontSize:13,fontWeight:700}}>{s.last.pct}%</div>:<div style={{color:"#bbb",fontSize:13}}>—</div>}
+            <div key={s.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 12px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={{fontSize:14,fontWeight:600,color:YX_DARK}}>{s.name}</div>
+                <div style={{display:"flex",gap:4}}>
+                  {s.slLast&&<div style={{background:"#e0f2fe",color:"#0369a1",padding:"3px 7px",borderRadius:5,fontSize:11,fontWeight:700}} title="Egenvurdering">🏪{s.slLast.pct}%</div>}
+                  {s.rsLast&&<div style={{background:sc(s.rsLast.pct),color:"#fff",padding:"3px 7px",borderRadius:5,fontSize:11,fontWeight:700}} title="Regionssjef">📋{s.rsLast.pct}%</div>}
+                </div>
+              </div>
+              <div style={{fontSize:10,color:"#999",marginTop:3}}>
+                {s.totalVisits} besøk
+                {s.slLast&&s.rsLast&&` · Gap: ${Math.abs(s.slLast.pct-s.rsLast.pct)}pp`}
+                {!s.slLast&&!s.rsLast&&"Ikke besøkt"}
+              </div>
             </div>
           ))}
         </div>
