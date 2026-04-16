@@ -325,6 +325,10 @@ function App(){
   /* ── HOME ── */
   if(view==="home"){
     const myV=visits.filter(v=>isRS?v.visit_role==="rs":v.visit_role==="sl").slice(0,5);
+    const yearStart=new Date(new Date().getFullYear(),0,1).toISOString();
+    const yearVisits=visits.filter(v=>v.created_at>=yearStart);
+    const yearRS=yearVisits.filter(v=>v.visit_role==="rs");
+    const yearSL=yearVisits.filter(v=>v.visit_role==="sl");
     return(
     <div style={{paddingBottom:40}}>
       {/* Header */}
@@ -347,12 +351,12 @@ function App(){
         {(isRS||isLeder)&&(
           <div style={{display:"flex",gap:8,marginBottom:14}}>
             <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px",textAlign:"center"}}>
-              <div style={{fontSize:22,fontWeight:800,color:D}}>{visits.length}</div>
-              <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:1}}>Besøk</div>
+              <div style={{fontSize:22,fontWeight:800,color:D}}>{yearRS.length}</div>
+              <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:1}}>RS-besøk i år</div>
             </div>
             <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px",textAlign:"center"}}>
-              <div style={{fontSize:22,fontWeight:800,color:D}}>{visits.length?Math.round(visits.reduce((s,v)=>s+v.pct,0)/visits.length):0}%</div>
-              <div style={{fontSize:10,color:"#999",textTransform:"uppercase",letterSpacing:1}}>Snitt</div>
+              <div style={{fontSize:22,fontWeight:800,color:yearVisits.length?pCol(Math.round(yearVisits.reduce((s,v)=>s+v.pct,0)/yearVisits.length)):D}}>{yearVisits.length?Math.round(yearVisits.reduce((s,v)=>s+v.pct,0)/yearVisits.length):0}%</div>
+              <div style={{fontSize:9,color:"#999",textTransform:"uppercase",letterSpacing:1}}>Snitt i år</div>
             </div>
             <button onClick={()=>setView("dash")} style={{flex:1,background:D,borderRadius:12,padding:"12px",textAlign:"center",color:"#fff"}}>
               <div style={{fontSize:18}}>📊</div>
@@ -428,16 +432,16 @@ function App(){
         </div>
       )}
 
-      {/* Recent visits */}
+      {/* Recent visits — clickable */}
       {myV.length>0&&(
         <div style={{padding:"20px 20px 0"}}>
           <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>Siste besøk</div>
-          {myV.map(v=>{const sn=stations.find(s=>s.id===v.station_id)?.name||"";return(
-            <div key={v.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div><div style={{fontSize:13,fontWeight:600,color:D}}>{sn}</div><div style={{fontSize:10,color:"#999"}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div></div>
+          {myV.map(v=>{const sn=stations.find(s=>s.id===v.station_id);return sn?(
+            <button key={v.id} onClick={()=>{setStationView(sn);setView("stationDetail");}} style={{width:"100%",background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
+              <div><div style={{fontSize:13,fontWeight:600,color:D}}>{sn.name}</div><div style={{fontSize:10,color:"#999"}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div></div>
               <div style={{background:pCol(v.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:700}}>{v.pct}%</div>
-            </div>
-          );})}
+            </button>
+          ):null;})}
         </div>
       )}
     </div>
@@ -445,7 +449,7 @@ function App(){
 
   /* ── AUDIT ── */
   if(view==="audit"&&station){
-    const cat=JOURNEY[catIdx];
+    const cat=journeySteps[catIdx];
     const ci=cat.items.filter(i=>!isNA(i.id));
     const cMax=ci.reduce((s,i)=>s+i.max,0);
     const cScore=ci.reduce((s,i)=>s+(G(i.id)||0),0);
@@ -644,6 +648,82 @@ function App(){
     );
   }
 
+  /* ── STATION DETAIL ── */
+  if(view==="stationDetail"&&stationView){
+    const sv=stationView;
+    const stVisits=visits.filter(v=>v.station_id===sv.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+    const lastRS=stVisits.find(v=>v.visit_role==="rs");
+    const lastSL=stVisits.find(v=>v.visit_role==="sl");
+    // Unresolved: items scored <max on last RS visit
+    const unresolved=lastRS?Object.entries(lastRS.scores||{}).filter(([k,v])=>v<5&&!lastRS.na_items?.includes(k)).map(([k,v])=>{
+      const item=JOURNEY.flatMap(j=>j.items).find(i=>String(i.id)===k);
+      return item?{...item,score:v,note:lastRS.notes?.[k]||""}:null;
+    }).filter(Boolean):[];
+
+    return(
+      <div style={{paddingBottom:40}}>
+        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
+          <button onClick={()=>{setStationView(null);setView("home");}} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>← Tilbake</button>
+          <span style={{color:"#fff",fontSize:14,fontWeight:700}}>{sv.name}</span>
+          <button onClick={()=>{setStation(sv);setView("audit");}} style={{color:"#5577aa",fontSize:12,fontWeight:600}}>Nytt besøk</button>
+        </div>
+        <div style={{padding:"16px 20px"}}>
+          {/* Station info */}
+          <div style={{fontSize:12,color:"#888",marginBottom:16}}>{sv.address}, {sv.postnr} {sv.poststed} · {sv.type==="automat"?"Automat":"Fullservice"}</div>
+
+          {/* Score summary */}
+          <div style={{display:"flex",gap:8,marginBottom:20}}>
+            <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"14px",textAlign:"center"}}>
+              <div style={{fontSize:28,fontWeight:800,color:lastSL?pCol(lastSL.pct):"#ccc"}}>{lastSL?lastSL.pct+"%":"—"}</div>
+              <div style={{fontSize:10,color:"#999",marginTop:2}}>Stasjonens vurdering</div>
+            </div>
+            <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"14px",textAlign:"center"}}>
+              <div style={{fontSize:28,fontWeight:800,color:lastRS?pCol(lastRS.pct):"#ccc"}}>{lastRS?lastRS.pct+"%":"—"}</div>
+              <div style={{fontSize:10,color:"#999",marginTop:2}}>Regionssjefens score</div>
+            </div>
+            {lastRS&&lastSL&&(
+              <div style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"14px",textAlign:"center"}}>
+                <div style={{fontSize:28,fontWeight:800,color:Math.abs(lastSL.pct-lastRS.pct)>15?"#dc2626":Math.abs(lastSL.pct-lastRS.pct)>5?"#d97706":"#16a34a"}}>{Math.abs(lastSL.pct-lastRS.pct)}pp</div>
+                <div style={{fontSize:10,color:"#999",marginTop:2}}>Gap</div>
+              </div>
+            )}
+          </div>
+
+          {/* Unresolved items from last visit */}
+          {unresolved.length>0&&(
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>⚠️ Åpne punkter fra forrige besøk</div>
+              {unresolved.map(item=>(
+                <div key={item.id} style={{background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontSize:13,fontWeight:600,color:D,flex:1}}>{item.t}</div>
+                    <div style={{background:item.score===0?"#dc2626":"#d97706",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700,flexShrink:0,marginLeft:8}}>{item.score===0?"Ikke godkjent":"Delvis"}</div>
+                  </div>
+                  {item.note&&<div style={{fontSize:11,color:"#666",marginTop:4,fontStyle:"italic"}}>"{item.note}"</div>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Visit history */}
+          <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>Tidligere besøk</div>
+          {stVisits.length===0&&<div style={{color:"#999",fontSize:13}}>Ingen besøk registrert ennå</div>}
+          {stVisits.map(v=>(
+            <div key={v.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:600,color:D}}>
+                  {v.visit_role==="rs"?"📋 Regionssjef":"🏪 Stasjonsleder"}
+                </div>
+                <div style={{fontSize:10,color:"#999"}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+              </div>
+              <div style={{background:pCol(v.pct),color:"#fff",padding:"3px 8px",borderRadius:6,fontSize:12,fontWeight:700}}>{v.pct}%</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   /* ── DASHBOARD ── */
   if(view==="dash"){
     const rsV=visits.filter(v=>v.visit_role==="rs");
@@ -695,7 +775,7 @@ function App(){
           {/* Stations ranked */}
           <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:10}}>Stasjoner etter score</div>
           {stScores.map(s=>(
-            <div key={s.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
                 <div style={{fontSize:10,color:"#999"}}>{s.lastRS?new Date(s.lastRS.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"}):"Ikke besøkt"}</div>
@@ -704,7 +784,7 @@ function App(){
                 {s.lastSL&&<div style={{background:"#dbeafe",color:"#1e40af",padding:"3px 7px",borderRadius:6,fontSize:10,fontWeight:700}}>SL {s.lastSL.pct}%</div>}
                 {s.lastRS&&<div style={{background:pCol(s.lastRS.pct),color:"#fff",padding:"3px 7px",borderRadius:6,fontSize:10,fontWeight:700}}>RS {s.lastRS.pct}%</div>}
               </div>
-            </div>
+            </button>
           ))}
 
           {stScores.length===0&&<div style={{textAlign:"center",padding:40,color:"#999"}}>Ingen besøk registrert ennå</div>}
