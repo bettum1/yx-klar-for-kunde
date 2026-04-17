@@ -580,32 +580,51 @@ function App(){
         await sb.from("actions").update({status:'completed',completed_at:new Date().toISOString(),completed_by:user.id}).eq("id",a.id);
       }
 
-      // 2. Auto-create actions for non-approved items (where no open action exists)
+      // 2. Auto-create or reopen actions for non-approved items
       const toCreate=[];
+      const toReopen=[];
       for(const[itemIdStr,s]of Object.entries(scores)){
         const item=allItems.find(i=>String(i.id)===itemIdStr);
         if(!item)continue;
         if(na[itemIdStr])continue;
         if(s>=item.max)continue; // Godkjent — no action needed
-        // Skip if there's already an open action for this item
-        const existing=stationActions.find(a=>String(a.item_id)===itemIdStr&&(a.status==='open'||a.status==='in_progress'));
-        if(existing)continue;
+        const newPriority=s===0?'high':'medium';
         const title=item.t.split(" — ")[0];
+
+        // Find any existing action for this item on this station (open, in_progress, OR completed)
+        const existing=stationActions.find(a=>String(a.item_id)===itemIdStr);
+        if(existing){
+          if(existing.status==='open'||existing.status==='in_progress'){
+            // Already active — only upgrade priority if now worse
+            if(newPriority==='high'&&existing.priority!=='high'&&existing.priority!=='critical'){
+              await sb.from("actions").update({priority:'high'}).eq("id",existing.id);
+            }
+          }else if(existing.status==='completed'){
+            // Previously closed but problem returned — reopen it
+            toReopen.push({id:existing.id,priority:newPriority});
+          }
+          continue;
+        }
+
+        // Brand new tiltak
         toCreate.push({
           station_id:station.id,visit_id:data.id,item_id:itemIdStr,
-          description:title,priority:s===0?'high':'medium',
+          description:title,priority:newPriority,
           status:'open',created_by:user.id
         });
       }
       if(toCreate.length>0){
         await sb.from("actions").insert(toCreate);
       }
+      for(const r of toReopen){
+        await sb.from("actions").update({status:'open',priority:r.priority,completed_at:null,completed_by:null,visit_id:data.id}).eq("id",r.id);
+      }
 
       // Reload actions
       const{data:ac}=await sb.from("actions").select("*").order("created_at",{ascending:false}).limit(500);
       if(ac)setActions(ac);
 
-      setLastVisit({...data,stationName:station.name,autoActions:{closed:toClose.length,created:toCreate.length}});
+      setLastVisit({...data,stationName:station.name,autoActions:{closed:toClose.length,created:toCreate.length,reopened:toReopen.length}});
       const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(500);
       if(vv){setVisits(vv);saveCache(stations,vv);}
       setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
@@ -1285,10 +1304,11 @@ function App(){
         </div>
 
         {/* Auto-action summary */}
-        {v.autoActions&&(v.autoActions.closed>0||v.autoActions.created>0)&&(
+        {v.autoActions&&(v.autoActions.closed>0||v.autoActions.created>0||v.autoActions.reopened>0)&&(
           <div className="fadeUp" style={{width:"100%",maxWidth:400,marginTop:12,background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,padding:"12px 14px",animationDelay:"420ms"}}>
             <div style={{fontSize:12,fontWeight:700,color:"#fff",marginBottom:6}}>📋 Tiltak oppdatert automatisk</div>
-            {v.autoActions.created>0&&<div style={{fontSize:12,color:"rgba(255,255,255,.75)"}}>🔴 {v.autoActions.created} nye tiltak opprettet for punkter som ikke ble godkjent</div>}
+            {v.autoActions.created>0&&<div style={{fontSize:12,color:"rgba(255,255,255,.75)"}}>🔴 {v.autoActions.created} nye tiltak opprettet</div>}
+            {v.autoActions.reopened>0&&<div style={{fontSize:12,color:"rgba(255,255,255,.75)",marginTop:2}}>↻ {v.autoActions.reopened} tidligere lukkede tiltak åpnet igjen (problemet dukket opp)</div>}
             {v.autoActions.closed>0&&<div style={{fontSize:12,color:"rgba(255,255,255,.75)",marginTop:2}}>🟢 {v.autoActions.closed} tiltak automatisk lukket (scoret Godkjent)</div>}
           </div>
         )}
