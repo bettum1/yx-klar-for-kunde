@@ -302,23 +302,27 @@ const HMS_DATA={
 const curT=()=>{const m=new Date().getMonth()+1;return m<=4?"t1":m<=8?"t2":"t3";};
 const hmsStep=()=>({id:"hms",name:"HMS — "+({t1:"Jan–Apr",t2:"Mai–Aug",t3:"Sep–Des"}[curT()]),icon:"⚠️",step:5,img:"img/journey-1-vei.jpg",desc:"HMS-gjennomgang for gjeldende tertial. Lovpålagt internkontroll.",items:HMS_DATA[curT()].items});
 
-/* ── Autosave helpers ── */
+/* ── Autosave helpers (user-scoped) ── */
 const DRAFT_KEY='yx_kfk_draft';
-function saveDraft(station,scores,na,notes,photos,visitNote,catIdx,includeHms){
-  if(!station)return;
+function saveDraft(userId,station,scores,na,notes,photos,visitNote,catIdx,includeHms){
+  if(!station||!userId)return;
   try{
-    localStorage.setItem(DRAFT_KEY,JSON.stringify({
-      stationId:station.id,stationName:station.name,
+    localStorage.setItem(DRAFT_KEY+'_'+userId,JSON.stringify({
+      stationId:station.id,stationName:station.name,userId,
       scores,na,notes,photos,visitNote,catIdx,includeHms,
       savedAt:Date.now()
     }));
   }catch(e){console.warn('Autosave failed:',e);}
 }
-function loadDraft(){
-  try{const d=localStorage.getItem(DRAFT_KEY);return d?JSON.parse(d):null;}
+function loadDraft(userId){
+  if(!userId)return null;
+  try{const d=localStorage.getItem(DRAFT_KEY+'_'+userId);return d?JSON.parse(d):null;}
   catch(e){return null;}
 }
-function clearAutosave(){try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}
+function clearAutosave(userId){
+  if(!userId)return;
+  try{localStorage.removeItem(DRAFT_KEY+'_'+userId);}catch(e){}
+}
 
 /* ── Offline cache ── */
 const CACHE_KEY='yx_kfk_cache';
@@ -415,7 +419,7 @@ function App(){
   // Autosave on changes during audit
   useEffect(()=>{
     if(view==='audit'&&station){
-      const t=setTimeout(()=>saveDraft(station,scores,na,notes,photos,visitNote,catIdx,includeHms),500);
+      const t=setTimeout(()=>saveDraft(user?.id,station,scores,na,notes,photos,visitNote,catIdx,includeHms),500);
       return()=>clearTimeout(t);
     }
   },[view,station,scores,na,notes,photos,visitNote,catIdx,includeHms]);
@@ -423,7 +427,7 @@ function App(){
   // Check for draft on load
   useEffect(()=>{
     if(view==='home'&&stations.length>0&&!draft){
-      const d=loadDraft();
+      const d=loadDraft(user?.id);
       if(d&&Date.now()-d.savedAt<7*24*3600*1000){ // 7 days
         const st=stations.find(s=>s.id===d.stationId);
         if(st)setDraft({...d,station:st});
@@ -505,7 +509,7 @@ function App(){
   const login=async()=>{setLoginErr("");setLoginLoad(true);const{error}=await sb.auth.signInWithPassword({email:loginEmail,password:loginPw});if(error)setLoginErr("Feil e-post eller passord");setLoginLoad(false);};
   const logout=async()=>{
     if(queueCount>0&&!confirm(`Du har ${queueCount} ulagrede besøk i kø. Logg ut likevel?`))return;
-    clearAutosave();
+    clearAutosave(user?.id);
     try{localStorage.removeItem(CACHE_KEY);localStorage.removeItem(QUEUE_KEY);}catch(e){}
     await sb.auth.signOut();
   };
@@ -534,7 +538,7 @@ function App(){
         setQueueCount(getQueue().length);
         setLastVisit({...v,stationName:station.name,id:'local',created_at:new Date().toISOString(),offline:true});
         setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
-        clearAutosave();setView("done");
+        clearAutosave(user?.id);setView("done");
       }else{alert("Kunne ikke lagre lokalt. Sjekk lagringsplass.");}
       return;
     }
@@ -558,7 +562,7 @@ function App(){
       const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);
       if(vv){setVisits(vv);saveCache(stations,vv);}
       setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
-      clearAutosave();setView("done");
+      clearAutosave(user?.id);setView("done");
     }catch(err){
       // Fallback to queue if online save fails
       const queued=queueVisit({...v,photos});
@@ -567,7 +571,7 @@ function App(){
         alert("Ikke tilkoblet — besøket er lagret lokalt og sendes automatisk når du er online.");
         setLastVisit({...v,stationName:station.name,id:'local',created_at:new Date().toISOString(),offline:true});
         setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
-        clearAutosave();setView("done");
+        clearAutosave(user?.id);setView("done");
       }else{alert("Kunne ikke lagre besøk: "+(err.message||"ukjent feil"));}
     }finally{setSaving(false);}
   };
@@ -691,7 +695,7 @@ function App(){
   const isRS=role==="regionssjef";
   const isLeder=role==="leder";
   const isSL=role==="stasjonsleder";
-  const cancelAudit=()=>{const hw=Object.keys(scores).length>0;if(hw&&!confirm("Avbryte? Alt arbeid går tapt."))return;setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setShowRef(false);setIncludeHms(null);clearAutosave();setView("home");};
+  const cancelAudit=()=>{const hw=Object.keys(scores).length>0;if(hw&&!confirm("Avbryte? Alt arbeid går tapt."))return;setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setShowRef(false);setIncludeHms(null);clearAutosave(user?.id);setView("home");};
 
   const resumeDraft=()=>{
     if(!draft)return;
@@ -702,7 +706,7 @@ function App(){
   };
 
   const discardDraft=()=>{
-    if(confirm("Forkaste utkastet?")){clearAutosave();setDraft(null);}
+    if(confirm("Forkaste utkastet?")){clearAutosave(user?.id);setDraft(null);}
   };
 
   /* ── LOADING ── */
