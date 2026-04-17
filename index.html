@@ -6,6 +6,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0C2340">
 <title>YX — Klar for Kunde</title>
+<link rel="manifest" href="manifest.json">
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW register failed:',err));
+  });
+}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -308,6 +316,38 @@ function loadDraft(){
 }
 function clearAutosave(){try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}
 
+/* ── Offline cache ── */
+const CACHE_KEY='yx_kfk_cache';
+const QUEUE_KEY='yx_kfk_queue';
+
+function saveCache(stations,visits){
+  try{
+    const data={stations,visits:visits.slice(0,100),savedAt:Date.now()};
+    localStorage.setItem(CACHE_KEY,JSON.stringify(data));
+  }catch(e){console.warn('Cache save failed:',e);}
+}
+function loadCache(){
+  try{const d=localStorage.getItem(CACHE_KEY);return d?JSON.parse(d):null;}
+  catch(e){return null;}
+}
+function queueVisit(visit){
+  try{
+    const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');
+    q.push({...visit,queuedAt:Date.now(),id:'local-'+Date.now()});
+    localStorage.setItem(QUEUE_KEY,JSON.stringify(q));
+    return true;
+  }catch(e){return false;}
+}
+function getQueue(){
+  try{return JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');}catch(e){return[];}
+}
+function clearFromQueue(localId){
+  try{
+    const q=JSON.parse(localStorage.getItem(QUEUE_KEY)||'[]');
+    localStorage.setItem(QUEUE_KEY,JSON.stringify(q.filter(v=>v.id!==localId)));
+  }catch(e){}
+}
+
 /* ── Error Boundary — prevents full app crash ── */
 class ErrorBoundary extends React.Component{
   constructor(p){super(p);this.state={err:null};}
@@ -358,6 +398,9 @@ function App(){
   const[includeHms,setIncludeHms]=useState(null); // null=not asked, true/false
   const[stationView,setStationView]=useState(null); // station detail view
   const[draft,setDraft]=useState(null); // recovered draft
+  const[online,setOnline]=useState(navigator.onLine);
+  const[queueCount,setQueueCount]=useState(0);
+  const[syncing,setSyncing]=useState(false);
 
   // Dynamic journey steps — 4 base + optional HMS
   const journeySteps=useMemo(()=>includeHms?[...JOURNEY,hmsStep()]:JOURNEY,[includeHms]);
@@ -390,10 +433,62 @@ function App(){
   const loadProf=async uid=>{const{data}=await sb.from("profiles").select("*").eq("id",uid).single();setProfile(data);if(data)await loadData();setLoading(false);setView("home");};
   const loadData=async()=>{
     setStLoad(true);
-    const{data:st}=await sb.from("stations").select("*").order("name");setStations(st||[]);setStLoad(false);
-    const{data:v}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);setVisits(v||[]);
-    const{data:se}=await sb.from("visits").select("*").eq("visit_role","sl").order("created_at",{ascending:false}).limit(300);setSelfEvals(se||[]);
+    // Try cache first for instant load
+    const cached=loadCache();
+    if(cached){setStations(cached.stations||[]);setVisits(cached.visits||[]);setStLoad(false);}
+
+    // Update queue count
+    setQueueCount(getQueue().length);
+
+    if(!navigator.onLine){setStLoad(false);return;}
+
+    try{
+      const{data:st}=await sb.from("stations").select("*").order("name");
+      if(st){setStations(st);}
+      const{data:v}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);
+      if(v){setVisits(v);}
+      const{data:se}=await sb.from("visits").select("*").eq("visit_role","sl").order("created_at",{ascending:false}).limit(300);setSelfEvals(se||[]);
+      if(st&&v)saveCache(st,v);
+    }catch(e){console.warn('Data load failed, using cache:',e);}
+    finally{setStLoad(false);}
+
     if(navigator.geolocation)navigator.geolocation.getCurrentPosition(p=>setLoc({lat:p.coords.latitude,lng:p.coords.longitude}),()=>{});
+  };
+
+  // Online/offline detection + auto-sync
+  useEffect(()=>{
+    const goOnline=()=>{setOnline(true);syncQueue();};
+    const goOffline=()=>setOnline(false);
+    window.addEventListener('online',goOnline);
+    window.addEventListener('offline',goOffline);
+    return()=>{window.removeEventListener('online',goOnline);window.removeEventListener('offline',goOffline);};
+  },[]);
+
+  // Sync queued visits when online
+  const syncQueue=async()=>{
+    const q=getQueue();
+    if(q.length===0||syncing)return;
+    setSyncing(true);
+    let synced=0;
+    for(const qv of q){
+      try{
+        const{id,queuedAt,photos:photosByItem,...visitData}=qv;
+        const{data,error}=await sb.from("visits").insert(visitData).select().single();
+        if(!error&&data){
+          // Save photo records if any
+          if(photosByItem){
+            const recs=[];
+            Object.entries(photosByItem).forEach(([itemId,arr])=>{
+              (arr||[]).forEach(p=>{if(p.path)recs.push({visit_id:data.id,item_id:String(itemId),storage_path:p.path,public_url:p.url,uploaded_by:user.id});});
+            });
+            if(recs.length>0)await sb.from("visit_photos").insert(recs);
+          }
+          clearFromQueue(id);synced++;
+        }
+      }catch(e){console.warn('Sync failed:',e);break;}
+    }
+    setQueueCount(getQueue().length);setSyncing(false);
+    if(synced>0)await loadData();
   };
   const login=async()=>{setLoginErr("");setLoginLoad(true);const{error}=await sb.auth.signInWithPassword({email:loginEmail,password:loginPw});if(error)setLoginErr("Feil e-post eller passord");setLoginLoad(false);};
   const logout=async()=>{await sb.auth.signOut();};
@@ -411,13 +506,26 @@ function App(){
 
   const submit=async()=>{
     if(!station||!profile)return;setSaving(true);
+    const photoCount=Object.values(photos).reduce((s,a)=>s+(a?.length||0),0);
+    const v={station_id:station.id,user_id:user.id,visit_role:profile.role==="regionssjef"?"rs":"sl",scores,na_items:Object.keys(na).filter(k=>na[k]),notes,visit_note:visitNote,total_score:tScore,max_score:aMax,pct:tPct,photo_count:photoCount};
+
+    // If offline, queue it
+    if(!navigator.onLine){
+      const queued=queueVisit({...v,photos});
+      setSaving(false);
+      if(queued){
+        setQueueCount(getQueue().length);
+        setLastVisit({...v,stationName:station.name,id:'local',created_at:new Date().toISOString(),offline:true});
+        setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
+        clearAutosave();setView("done");
+      }else{alert("Kunne ikke lagre lokalt. Sjekk lagringsplass.");}
+      return;
+    }
+
     try{
-      const photoCount=Object.values(photos).reduce((s,a)=>s+(a?.length||0),0);
-      const v={station_id:station.id,user_id:user.id,visit_role:profile.role==="regionssjef"?"rs":"sl",scores,na_items:Object.keys(na).filter(k=>na[k]),notes,visit_note:visitNote,total_score:tScore,max_score:aMax,pct:tPct,photo_count:photoCount};
       const{data,error}=await sb.from("visits").insert(v).select().single();
       if(error)throw error;
 
-      // Save photo records
       if(photoCount>0){
         const photoRecords=[];
         Object.entries(photos).forEach(([itemId,arr])=>{
@@ -430,12 +538,20 @@ function App(){
       }
 
       setLastVisit({...data,stationName:station.name});
-      const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);setVisits(vv||[]);
+      const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);
+      if(vv){setVisits(vv);saveCache(stations,vv);}
       setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
-      clearAutosave();
-      setView("done");
+      clearAutosave();setView("done");
     }catch(err){
-      alert("Kunne ikke lagre besøk: "+(err.message||"ukjent feil"));
+      // Fallback to queue if online save fails
+      const queued=queueVisit({...v,photos});
+      if(queued){
+        setQueueCount(getQueue().length);
+        alert("Ikke tilkoblet — besøket er lagret lokalt og sendes automatisk når du er online.");
+        setLastVisit({...v,stationName:station.name,id:'local',created_at:new Date().toISOString(),offline:true});
+        setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
+        clearAutosave();setView("done");
+      }else{alert("Kunne ikke lagre besøk: "+(err.message||"ukjent feil"));}
     }finally{setSaving(false);}
   };
 
@@ -494,6 +610,8 @@ function App(){
       <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
         <img src={LW} alt="YX" style={{height:24}}/>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
+          {!online&&<span style={{fontSize:10,fontWeight:700,color:"#fff",background:"#d97706",padding:"3px 8px",borderRadius:5}}>📡 OFFLINE</span>}
+          {queueCount>0&&online&&<button onClick={syncQueue} style={{fontSize:10,fontWeight:700,color:"#fff",background:"#059669",padding:"3px 8px",borderRadius:5}}>{syncing?"Synker...":`↑ ${queueCount} i kø`}</button>}
           <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
           <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
         </div>
