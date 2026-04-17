@@ -1515,34 +1515,34 @@ function App(){
           </div>
 
           {/* Top 3 / Bottom 3 */}
-          {stScores.length>=3&&(<>
-            <div style={{display:"flex",gap:12,marginBottom:20}}>
-              <div style={{flex:1}}>
+          {stScores.length>=3&&(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:12,marginBottom:20}}>
+              <div style={{minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:8}}>🏆 Topp 3</div>
                 {[...stScores].sort((a,b)=>(b.lastSL?.pct??0)-(a.lastSL?.pct??0)).slice(0,3).map((s,i)=>(
-                  <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 12px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:14,fontWeight:800,color:"#16a34a"}}>{i+1}.</span>
-                      <span style={{fontSize:12,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                  <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 12px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                      <span style={{fontSize:14,fontWeight:800,color:"#16a34a",flexShrink:0}}>{i+1}.</span>
+                      <span style={{fontSize:12,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{s.name}</span>
                     </div>
-                    <span style={{fontSize:12,fontWeight:800,color:"#16a34a"}}>{s.lastSL?.pct}%</span>
+                    <span style={{fontSize:12,fontWeight:800,color:"#16a34a",flexShrink:0}}>{s.lastSL?.pct}%</span>
                   </button>
                 ))}
               </div>
-              <div style={{flex:1}}>
+              <div style={{minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#dc2626",marginBottom:8}}>⚠️ Trenger oppfølging</div>
                 {[...stScores].sort((a,b)=>(a.lastSL?.pct??100)-(b.lastSL?.pct??100)).slice(0,3).map((s,i)=>(
-                  <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:14,fontWeight:800,color:"#dc2626"}}>{i+1}.</span>
-                      <span style={{fontSize:12,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                  <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"10px 12px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",textAlign:"left",gap:8}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                      <span style={{fontSize:14,fontWeight:800,color:"#dc2626",flexShrink:0}}>{i+1}.</span>
+                      <span style={{fontSize:12,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{s.name}</span>
                     </div>
-                    <span style={{fontSize:12,fontWeight:800,color:"#dc2626"}}>{s.lastSL?.pct}%</span>
+                    <span style={{fontSize:12,fontWeight:800,color:"#dc2626",flexShrink:0}}>{s.lastSL?.pct}%</span>
                   </button>
                 ))}
               </div>
             </div>
-          </>)}
+          )}
 
           {/* Score per area */}
           {(()=>{
