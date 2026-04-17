@@ -403,6 +403,7 @@ function App(){
   const[syncing,setSyncing]=useState(false);
   const[actions,setActions]=useState([]);
   const[campaigns,setCampaigns]=useState([]);
+  const[regions,setRegions]=useState([]);
 
   // Dynamic journey steps — 4 base + optional HMS
   const journeySteps=useMemo(()=>includeHms?[...JOURNEY,hmsStep()]:JOURNEY,[includeHms]);
@@ -452,6 +453,7 @@ function App(){
       const{data:se}=await sb.from("visits").select("*").eq("visit_role","sl").order("created_at",{ascending:false}).limit(300);setSelfEvals(se||[]);
       const{data:ac}=await sb.from("actions").select("*").order("created_at",{ascending:false}).limit(200);setActions(ac||[]);
       const{data:camp}=await sb.from("campaigns").select("*").eq("active",true).limit(3);setCampaigns(camp||[]);
+      const{data:reg}=await sb.from("regions").select("*");setRegions(reg||[]);
       if(st&&v)saveCache(st,v);
     }catch(e){console.warn('Data load failed, using cache:',e);}
     finally{setStLoad(false);}
@@ -654,7 +656,18 @@ function App(){
 
   const getSE=sid=>selfEvals.find(v=>v.station_id===sid);  const getSES=(se,id)=>se?.scores?.[String(id)];
   const dist=s=>{if(!loc||!s.lat||!s.lng)return 99999;const r=Math.PI/180,a=Math.sin((s.lat-loc.lat)*r/2)**2+Math.cos(loc.lat*r)*Math.cos(s.lat*r)*Math.sin((s.lng-loc.lng)*r/2)**2;return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));};
-  const filt=useMemo(()=>{let l=stations;if(search.trim()){const q=search.toLowerCase();l=l.filter(s=>s.name.toLowerCase().includes(q)||s.poststed?.toLowerCase().includes(q));}if(loc)l=[...l].sort((a,b)=>dist(a)-dist(b));return l;},[stations,search,loc]);
+  const filt=useMemo(()=>{
+    let l=stations;
+    // Region filter: RS only sees their region's stations (unless region_id is null = admin mode)
+    if(profile?.role==="regionssjef"&&profile?.region_id){
+      l=l.filter(s=>s.region_id===profile.region_id);
+    }
+    if(search.trim()){const q=search.toLowerCase();l=l.filter(s=>s.name.toLowerCase().includes(q)||s.poststed?.toLowerCase().includes(q));}
+    if(loc)l=[...l].sort((a,b)=>dist(a)-dist(b));
+    return l;
+  },[stations,search,loc,profile]);
+
+  const myRegion=useMemo(()=>profile?.region_id?regions.find(r=>r.id===profile.region_id):null,[profile,regions]);
 
   const role=profile?.role;
   const isRS=role==="regionssjef";
@@ -695,9 +708,12 @@ function App(){
 
   /* ── HOME ── */
   if(view==="home"){
-    const myV=visits.filter(v=>isRS?v.visit_role==="rs":v.visit_role==="sl").slice(0,5);
+    // RS stats scoped to own region
+    const regionStationIds=isRS&&profile?.region_id?new Set(stations.filter(s=>s.region_id===profile.region_id).map(s=>s.id)):null;
+    const scopedVisits=regionStationIds?visits.filter(v=>regionStationIds.has(v.station_id)):visits;
+    const myV=scopedVisits.filter(v=>isRS?v.visit_role==="rs":v.visit_role==="sl").slice(0,5);
     const yearStart=new Date(new Date().getFullYear(),0,1).toISOString();
-    const yearVisits=visits.filter(v=>v.created_at>=yearStart);
+    const yearVisits=scopedVisits.filter(v=>v.created_at>=yearStart);
     const yearRS=yearVisits.filter(v=>v.visit_role==="rs");
     const yearSL=yearVisits.filter(v=>v.visit_role==="sl");
     return(
@@ -715,8 +731,9 @@ function App(){
 
       {/* Role + Journey overview */}
       <div style={{padding:"16px 20px 0"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
           <span style={{fontSize:11,fontWeight:700,color:"#fff",background:R,padding:"3px 10px",borderRadius:6}}>{isRS?"Regionssjef":role==="stasjonsleder"?"Stasjonsleder":"Leder"}</span>
+          {myRegion&&<span style={{fontSize:11,fontWeight:700,color:D,background:"#fff",border:"1px solid "+D,padding:"3px 10px",borderRadius:6}}>📍 Region {myRegion.name} · {filt.length} stasjoner</span>}
           <span style={{fontSize:13,color:"#666"}}>{isRS?"Coaching-besøk":"Selvevaluering"}</span>
         </div>
 
@@ -1398,9 +1415,11 @@ function App(){
 
   /* ── DASHBOARD ── */
   if(view==="dash"){
-    const rsV=visits.filter(v=>v.visit_role==="rs");
-    const slV=visits.filter(v=>v.visit_role==="sl");
-    const stScores=stations.map(s=>{
+    const scopedStations=isRS&&profile?.region_id?stations.filter(s=>s.region_id===profile.region_id):stations;
+    const scopedIds=new Set(scopedStations.map(s=>s.id));
+    const rsV=visits.filter(v=>v.visit_role==="rs"&&scopedIds.has(v.station_id));
+    const slV=visits.filter(v=>v.visit_role==="sl"&&scopedIds.has(v.station_id));
+    const stScores=scopedStations.map(s=>{
       const lastRS=rsV.find(v=>v.station_id===s.id);
       const lastSL=slV.find(v=>v.station_id===s.id);
       const gap=lastRS&&lastSL?lastSL.pct-lastRS.pct:null;
@@ -1408,7 +1427,7 @@ function App(){
     }).filter(s=>s.lastRS||s.lastSL).sort((a,b)=>(a.lastRS?.pct??a.lastSL?.pct??100)-(b.lastRS?.pct??b.lastSL?.pct??100));
     const avgRS=rsV.length?Math.round(rsV.reduce((s,v)=>s+v.pct,0)/rsV.length):0;
     const avgSL=slV.length?Math.round(slV.reduce((s,v)=>s+v.pct,0)/slV.length):0;
-    const visited=new Set(visits.map(v=>v.station_id)).size;
+    const visited=new Set(rsV.concat(slV).map(v=>v.station_id)).size;
 
     return(
       <div style={{paddingBottom:40}}>
@@ -1426,7 +1445,7 @@ function App(){
         <div style={{padding:"16px 20px"}}>
           {/* KPI row */}
           <div style={{display:"flex",gap:8,marginBottom:20}}>
-            {[[rsV.length,"RS-besøk",R],[avgRS+"%","RS-snitt",pCol(avgRS)],[visited+"/"+stations.length,"Stasjoner",B],[avgSL?avgSL+"%":"—","SL-snitt","#0369a1"]].map(([v,l,c],i)=>(
+            {[[rsV.length,"RS-besøk",R],[avgRS+"%","RS-snitt",pCol(avgRS)],[visited+"/"+scopedStations.length,"Stasjoner",B],[avgSL?avgSL+"%":"—","SL-snitt","#0369a1"]].map(([v,l,c],i)=>(
               <div key={i} style={{flex:1,background:"#fff",borderRadius:12,border:"1px solid #eae7df",padding:"12px 8px",textAlign:"center"}}>
                 <div style={{fontSize:20,fontWeight:800,color:c}}>{v}</div>
                 <div style={{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginTop:2}}>{l}</div>
