@@ -1406,7 +1406,7 @@ function App(){
                       <div style={{fontSize:11,color:"#888"}}>{unresolved.length} punkt{unresolved.length>1?"er":""}</div>
                     </div>
                     {unresolved.map(item=>{
-                      const existingAction=stationActions.find(a=>a.item_id===String(item.id)&&(a.status==='open'||a.status==='in_progress'));
+                      const existingAction=stationActions.find(a=>String(a.item_id)===String(item.id)&&(a.status==='open'||a.status==='in_progress'));
                       return(
                         <div key={item.id} style={{background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
                           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
