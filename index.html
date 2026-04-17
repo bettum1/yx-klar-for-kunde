@@ -497,7 +497,12 @@ function App(){
     if(synced>0)await loadData();
   };
   const login=async()=>{setLoginErr("");setLoginLoad(true);const{error}=await sb.auth.signInWithPassword({email:loginEmail,password:loginPw});if(error)setLoginErr("Feil e-post eller passord");setLoginLoad(false);};
-  const logout=async()=>{await sb.auth.signOut();};
+  const logout=async()=>{
+    if(queueCount>0&&!confirm(`Du har ${queueCount} ulagrede besøk i kø. Logg ut likevel?`))return;
+    clearAutosave();
+    try{localStorage.removeItem(CACHE_KEY);localStorage.removeItem(QUEUE_KEY);}catch(e){}
+    await sb.auth.signOut();
+  };
 
   const S=(id,v)=>setScores(s=>({...s,[String(id)]:v}));
   const G=id=>scores[String(id)]??null;
@@ -859,6 +864,10 @@ function App(){
           ):null;})}
         </div>
       )}
+
+      <div style={{padding:"30px 20px 20px",textAlign:"center",color:"#aaa",fontSize:10}}>
+        YX Klar for Kunde · v19.2 · {online?"🟢 Online":"🔴 Offline"}
+      </div>
     </div>
   );}
 
@@ -1184,7 +1193,7 @@ function App(){
         <div className="fadeUp" style={{color:"#4ade80",fontSize:12,marginTop:16,fontWeight:600,animationDelay:"450ms"}}>✓ Lagret i database</div>
         <div className="fadeUp" style={{display:"flex",gap:10,marginTop:28,animationDelay:"500ms"}}>
           <button onClick={()=>generateReport(v,v.stationName)} style={{padding:"15px 24px",background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>📄 PDF-rapport</button>
-          <button onClick={()=>setView("home")} style={{padding:"15px 24px",background:R,color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>Tilbake</button>
+          <button onClick={()=>{setStationView(null);setStation(null);setView("home");}} style={{padding:"15px 24px",background:R,color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>Tilbake</button>
         </div>
       </div>
     );
