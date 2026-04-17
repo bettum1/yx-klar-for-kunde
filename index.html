@@ -401,6 +401,7 @@ function App(){
   const[online,setOnline]=useState(navigator.onLine);
   const[queueCount,setQueueCount]=useState(0);
   const[syncing,setSyncing]=useState(false);
+  const[actions,setActions]=useState([]);
 
   // Dynamic journey steps — 4 base + optional HMS
   const journeySteps=useMemo(()=>includeHms?[...JOURNEY,hmsStep()]:JOURNEY,[includeHms]);
@@ -448,6 +449,7 @@ function App(){
       const{data:v}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);
       if(v){setVisits(v);}
       const{data:se}=await sb.from("visits").select("*").eq("visit_role","sl").order("created_at",{ascending:false}).limit(300);setSelfEvals(se||[]);
+      const{data:ac}=await sb.from("actions").select("*").order("created_at",{ascending:false}).limit(200);setActions(ac||[]);
       if(st&&v)saveCache(st,v);
     }catch(e){console.warn('Data load failed, using cache:',e);}
     finally{setStLoad(false);}
@@ -553,6 +555,25 @@ function App(){
         clearAutosave();setView("done");
       }else{alert("Kunne ikke lagre besøk: "+(err.message||"ukjent feil"));}
     }finally{setSaving(false);}
+  };
+
+  const createAction=async(stationId,itemId,title,priority='medium')=>{
+    const{data,error}=await sb.from("actions").insert({
+      station_id:stationId,item_id:String(itemId),title,priority,status:'open',created_by:user.id
+    }).select().single();
+    if(error){alert("Kunne ikke opprette tiltak: "+error.message);return null;}
+    setActions(a=>[data,...a]);
+    return data;
+  };
+
+  const updateAction=async(id,updates)=>{
+    const{data,error}=await sb.from("actions").update({...updates,updated_at:new Date().toISOString()}).eq("id",id).select().single();
+    if(error){alert("Kunne ikke oppdatere: "+error.message);return;}
+    setActions(a=>a.map(x=>x.id===id?data:x));
+  };
+
+  const completeAction=async(id)=>{
+    await updateAction(id,{status:'done',completed_at:new Date().toISOString()});
   };
 
   const getSE=sid=>selfEvals.find(v=>v.station_id===sid);
@@ -1187,21 +1208,68 @@ function App(){
             </div>
           )}
 
-          {/* Unresolved items from last visit */}
-          {unresolved.length>0&&(
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>⚠️ Åpne punkter fra forrige besøk</div>
-              {unresolved.map(item=>(
-                <div key={item.id} style={{background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{fontSize:13,color:D,flex:1}}>{item.t.includes(" — ")?<><span style={{fontWeight:700}}>{item.t.split(" — ")[0]}</span><span style={{fontWeight:400,color:"#555"}}> — {item.t.split(" — ").slice(1).join(" — ")}</span></>:<span style={{fontWeight:600}}>{item.t}</span>}</div>
-                    <div style={{background:item.score===0?"#dc2626":"#d97706",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700,flexShrink:0,marginLeft:8}}>{item.score===0?"Ikke godkjent":"Delvis"}</div>
+          {/* Open actions for this station */}
+          {(()=>{
+            const stationActions=actions.filter(a=>a.station_id===sv.id);
+            const openActions=stationActions.filter(a=>a.status==='open'||a.status==='in_progress');
+            const doneActions=stationActions.filter(a=>a.status==='done');
+            return(
+              <>
+                {/* Unresolved items → quick-create actions */}
+                {unresolved.length>0&&(
+                  <div style={{marginBottom:20}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <div style={{fontSize:14,fontWeight:700,color:D}}>⚠️ Åpne punkter fra forrige besøk</div>
+                      <div style={{fontSize:11,color:"#888"}}>{unresolved.length} punkt{unresolved.length>1?"er":""}</div>
+                    </div>
+                    {unresolved.map(item=>{
+                      const existingAction=stationActions.find(a=>a.item_id===String(item.id)&&(a.status==='open'||a.status==='in_progress'));
+                      return(
+                        <div key={item.id} style={{background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                            <div style={{fontSize:13,color:D,flex:1}}>{item.t.includes(" — ")?<><span style={{fontWeight:700}}>{item.t.split(" — ")[0]}</span><span style={{fontWeight:400,color:"#555"}}> — {item.t.split(" — ").slice(1).join(" — ")}</span></>:<span style={{fontWeight:600}}>{item.t}</span>}</div>
+                            <div style={{background:item.score===0?"#dc2626":"#d97706",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700,flexShrink:0}}>{item.score===0?"Ikke godkjent":"Delvis"}</div>
+                          </div>
+                          {item.note&&<div style={{fontSize:11,color:"#666",marginTop:4,fontStyle:"italic"}}>"{item.note}"</div>}
+                          {existingAction?(
+                            <div style={{display:"flex",gap:6,marginTop:8,alignItems:"center"}}>
+                              <span style={{fontSize:11,color:"#059669",fontWeight:600}}>✓ Tiltak opprettet</span>
+                              <button onClick={()=>completeAction(existingAction.id)} style={{fontSize:11,fontWeight:700,color:"#fff",background:"#16a34a",padding:"4px 10px",borderRadius:5}}>Lukk tiltak</button>
+                            </div>
+                          ):(
+                            <button onClick={()=>{const t=item.t.split(" — ")[0];createAction(sv.id,item.id,t,item.score===0?'high':'medium');}} style={{marginTop:8,fontSize:11,fontWeight:700,color:R,background:"#fff",border:"1px solid "+R,padding:"5px 10px",borderRadius:6}}>+ Opprett tiltak</button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {item.note&&<div style={{fontSize:11,color:"#666",marginTop:4,fontStyle:"italic"}}>"{item.note}"</div>}
-                </div>
-              ))}
-            </div>
-          )}
+                )}
+
+                {/* All open actions */}
+                {openActions.length>0&&(
+                  <div style={{marginBottom:20}}>
+                    <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>📋 Åpne tiltak ({openActions.length})</div>
+                    {openActions.map(a=>(
+                      <div key={a.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13,fontWeight:600,color:D}}>{a.title}</div>
+                          <div style={{fontSize:11,color:"#888",marginTop:2}}>
+                            Opprettet {new Date(a.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}
+                            <span style={{marginLeft:8,padding:"1px 6px",borderRadius:3,fontSize:10,fontWeight:700,background:a.priority==='high'||a.priority==='critical'?"#fef2f2":a.priority==='medium'?"#fffbeb":"#f0fdf4",color:a.priority==='high'||a.priority==='critical'?"#991b1b":a.priority==='medium'?"#92400e":"#166534"}}>{a.priority==='critical'?'Kritisk':a.priority==='high'?'Høy':a.priority==='medium'?'Medium':'Lav'}</span>
+                          </div>
+                        </div>
+                        <button onClick={()=>completeAction(a.id)} style={{fontSize:11,fontWeight:700,color:"#fff",background:"#16a34a",padding:"6px 12px",borderRadius:6,flexShrink:0}}>✓ Lukk</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {doneActions.length>0&&(
+                  <div style={{marginBottom:16,fontSize:11,color:"#16a34a"}}>✓ {doneActions.length} tiltak fullført</div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Visit history */}
           <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>Tidligere besøk</div>
