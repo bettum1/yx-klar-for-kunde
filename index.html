@@ -151,7 +151,68 @@ function Voice({onText}){
   );
 }
 
-function Cam({photos,onAdd,onRemove}){const ref=useRef();const h=e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=v=>onAdd(v.target.result);r.readAsDataURL(f);e.target.value="";};return(<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{(photos||[]).map((p,i)=>(<div key={i} style={{position:"relative",width:56,height:56,borderRadius:8,overflow:"hidden",border:"2px solid #eae7df"}}><img src={p} style={{width:"100%",height:"100%",objectFit:"cover"}}/><button onClick={()=>onRemove(i)} style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,.7)",color:"#fff",borderRadius:10,width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button></div>))}<button onClick={()=>ref.current?.click()} style={{width:56,height:56,borderRadius:8,border:"2px dashed #ccc",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#aaa",background:"#fafaf7"}}>📷</button><input ref={ref} type="file" accept="image/*" capture="environment" onChange={h}/></div>);}
+/* ── Camera with Supabase Storage upload ── */
+async function uploadPhoto(file,userId){
+  // Compress image before upload (max 1600px, 80% quality)
+  const compressed=await compressImage(file);
+  const ext=file.name.split('.').pop()||'jpg';
+  const path=`${userId}/${Date.now()}-${Math.random().toString(36).slice(2,9)}.${ext}`;
+  const{data,error}=await sb.storage.from('visit-photos').upload(path,compressed,{contentType:file.type||'image/jpeg',upsert:false});
+  if(error)throw error;
+  const{data:urlData}=sb.storage.from('visit-photos').getPublicUrl(path);
+  return{path:data.path,url:urlData.publicUrl};
+}
+
+async function compressImage(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const maxW=1600,maxH=1600;
+        let w=img.width,h=img.height;
+        if(w>maxW||h>maxH){const r=Math.min(maxW/w,maxH/h);w*=r;h*=r;}
+        const canvas=document.createElement('canvas');
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Compress failed')),'image/jpeg',.8);
+      };
+      img.onerror=reject;img.src=e.target.result;
+    };
+    reader.onerror=reject;reader.readAsDataURL(file);
+  });
+}
+
+function Cam({photos,onAdd,onRemove,userId}){
+  const ref=useRef();
+  const[uploading,setUploading]=useState(false);
+  const h=async e=>{
+    const f=e.target.files?.[0];if(!f)return;
+    e.target.value="";
+    setUploading(true);
+    try{
+      const{path,url}=await uploadPhoto(f,userId);
+      onAdd({path,url,thumb:url});
+    }catch(err){
+      console.error('Upload failed:',err);
+      alert('Kunne ikke laste opp bilde: '+(err.message||'ukjent feil'));
+    }finally{setUploading(false);}
+  };
+  return(
+    <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+      {(photos||[]).map((p,i)=>(
+        <div key={i} style={{position:"relative",width:64,height:64,borderRadius:8,overflow:"hidden",border:"2px solid #eae7df"}}>
+          <img src={p.thumb||p.url||p} style={{width:"100%",height:"100%",objectFit:"cover"}} alt="Bevis"/>
+          <button onClick={()=>onRemove(i)} aria-label="Slett bilde" style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,.75)",color:"#fff",borderRadius:10,width:22,height:22,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+        </div>
+      ))}
+      <button onClick={()=>ref.current?.click()} disabled={uploading} aria-label="Ta bilde" style={{width:64,height:64,borderRadius:8,border:"2px dashed #bbb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,color:"#888",background:"#fafaf7",opacity:uploading?.5:1}}>
+        {uploading?<div className="loader" style={{width:18,height:18,borderWidth:2,borderColor:"#ccc",borderTopColor:R}}/>:"📷"}
+      </button>
+      <input ref={ref} type="file" accept="image/*" capture="environment" onChange={h}/>
+    </div>
+  );
+}
 
 /* ── Scoring — max:1=Nei/Ja ── */
 const sOpts=m=>{
@@ -229,6 +290,45 @@ const HMS_DATA={
 const curT=()=>{const m=new Date().getMonth()+1;return m<=4?"t1":m<=8?"t2":"t3";};
 const hmsStep=()=>({id:"hms",name:"HMS — "+({t1:"Jan–Apr",t2:"Mai–Aug",t3:"Sep–Des"}[curT()]),icon:"⚠️",step:5,img:"img/journey-1-vei.jpg",desc:"HMS-gjennomgang for gjeldende tertial. Lovpålagt internkontroll.",items:HMS_DATA[curT()].items});
 
+/* ── Autosave helpers ── */
+const DRAFT_KEY='yx_kfk_draft';
+function saveDraft(station,scores,na,notes,photos,visitNote,catIdx,includeHms){
+  if(!station)return;
+  try{
+    localStorage.setItem(DRAFT_KEY,JSON.stringify({
+      stationId:station.id,stationName:station.name,
+      scores,na,notes,photos,visitNote,catIdx,includeHms,
+      savedAt:Date.now()
+    }));
+  }catch(e){console.warn('Autosave failed:',e);}
+}
+function loadDraft(){
+  try{const d=localStorage.getItem(DRAFT_KEY);return d?JSON.parse(d):null;}
+  catch(e){return null;}
+}
+function clearAutosave(){try{localStorage.removeItem(DRAFT_KEY);}catch(e){}}
+
+/* ── Error Boundary — prevents full app crash ── */
+class ErrorBoundary extends React.Component{
+  constructor(p){super(p);this.state={err:null};}
+  static getDerivedStateFromError(err){return{err};}
+  componentDidCatch(err,info){console.error('App crashed:',err,info);}
+  render(){
+    if(this.state.err){
+      return(
+        <div style={{minHeight:"100vh",background:"#0C2340",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:32,textAlign:"center"}}>
+          <div style={{fontSize:64,marginBottom:20}}>⚠️</div>
+          <div style={{color:"#fff",fontSize:22,fontWeight:800,marginBottom:12}}>Noe gikk galt</div>
+          <div style={{color:"rgba(255,255,255,.6)",fontSize:14,marginBottom:32,maxWidth:400}}>Appen har møtt en feil. Arbeidet ditt er automatisk lagret. Trykk under for å laste inn på nytt.</div>
+          <button onClick={()=>window.location.reload()} style={{padding:"15px 32px",background:"#CF122D",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15,border:"none"}}>Last inn på nytt</button>
+          <div style={{color:"rgba(255,255,255,.3)",fontSize:11,marginTop:24,maxWidth:400,fontFamily:"monospace"}}>{String(this.state.err.message||this.state.err)}</div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App(){
   const[loading,setLoading]=useState(true);
   const[user,setUser]=useState(null);
@@ -257,9 +357,29 @@ function App(){
   const[showAll,setShowAll]=useState(false);
   const[includeHms,setIncludeHms]=useState(null); // null=not asked, true/false
   const[stationView,setStationView]=useState(null); // station detail view
+  const[draft,setDraft]=useState(null); // recovered draft
 
   // Dynamic journey steps — 4 base + optional HMS
   const journeySteps=useMemo(()=>includeHms?[...JOURNEY,hmsStep()]:JOURNEY,[includeHms]);
+
+  // Autosave on changes during audit
+  useEffect(()=>{
+    if(view==='audit'&&station){
+      const t=setTimeout(()=>saveDraft(station,scores,na,notes,photos,visitNote,catIdx,includeHms),500);
+      return()=>clearTimeout(t);
+    }
+  },[view,station,scores,na,notes,photos,visitNote,catIdx,includeHms]);
+
+  // Check for draft on load
+  useEffect(()=>{
+    if(view==='home'&&stations.length>0&&!draft){
+      const d=loadDraft();
+      if(d&&Date.now()-d.savedAt<7*24*3600*1000){ // 7 days
+        const st=stations.find(s=>s.id===d.stationId);
+        if(st)setDraft({...d,station:st});
+      }
+    }
+  },[view,stations]);
 
   useEffect(()=>{
     sb.auth.getSession().then(({data:{session}})=>{if(session){setUser(session.user);loadProf(session.user.id);}else setLoading(false);});
@@ -291,12 +411,32 @@ function App(){
 
   const submit=async()=>{
     if(!station||!profile)return;setSaving(true);
-    const v={station_id:station.id,user_id:user.id,visit_role:profile.role==="regionssjef"?"rs":"sl",scores,na_items:Object.keys(na).filter(k=>na[k]),notes,visit_note:visitNote,total_score:tScore,max_score:aMax,pct:tPct,photo_count:Object.values(photos).reduce((s,a)=>s+(a?.length||0),0)};
-    const{data,error}=await sb.from("visits").insert(v).select().single();
-    setSaving(false);if(error){alert("Feil: "+error.message);return;}
-    setLastVisit({...data,stationName:station.name});
-    const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);setVisits(vv||[]);
-    setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setView("done");
+    try{
+      const photoCount=Object.values(photos).reduce((s,a)=>s+(a?.length||0),0);
+      const v={station_id:station.id,user_id:user.id,visit_role:profile.role==="regionssjef"?"rs":"sl",scores,na_items:Object.keys(na).filter(k=>na[k]),notes,visit_note:visitNote,total_score:tScore,max_score:aMax,pct:tPct,photo_count:photoCount};
+      const{data,error}=await sb.from("visits").insert(v).select().single();
+      if(error)throw error;
+
+      // Save photo records
+      if(photoCount>0){
+        const photoRecords=[];
+        Object.entries(photos).forEach(([itemId,arr])=>{
+          (arr||[]).forEach(p=>{if(p.path)photoRecords.push({visit_id:data.id,item_id:String(itemId),storage_path:p.path,public_url:p.url,uploaded_by:user.id});});
+        });
+        if(photoRecords.length>0){
+          const{error:pErr}=await sb.from("visit_photos").insert(photoRecords);
+          if(pErr)console.error("Photo link error:",pErr);
+        }
+      }
+
+      setLastVisit({...data,stationName:station.name});
+      const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);setVisits(vv||[]);
+      setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
+      clearAutosave();
+      setView("done");
+    }catch(err){
+      alert("Kunne ikke lagre besøk: "+(err.message||"ukjent feil"));
+    }finally{setSaving(false);}
   };
 
   const getSE=sid=>selfEvals.find(v=>v.station_id===sid);
@@ -306,7 +446,19 @@ function App(){
 
   const role=profile?.role;
   const isRS=role==="regionssjef";
-  const cancelAudit=()=>{const hw=Object.keys(scores).length>0;if(hw&&!confirm("Avbryte? Alt arbeid går tapt."))return;setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setShowRef(false);setIncludeHms(null);setView("home");};
+  const cancelAudit=()=>{const hw=Object.keys(scores).length>0;if(hw&&!confirm("Avbryte? Alt arbeid går tapt."))return;setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setShowRef(false);setIncludeHms(null);clearAutosave();setView("home");};
+
+  const resumeDraft=()=>{
+    if(!draft)return;
+    setStation(draft.station);
+    setScores(draft.scores||{});setNa(draft.na||{});setNotes(draft.notes||{});setPhotos(draft.photos||{});
+    setVisitNote(draft.visitNote||"");setCatIdx(draft.catIdx||0);setIncludeHms(draft.includeHms);
+    setDraft(null);setView("audit");
+  };
+
+  const discardDraft=()=>{
+    if(confirm("Forkaste utkastet?")){clearAutosave();setDraft(null);}
+  };
 
   /* ── LOADING ── */
   if(loading)return(<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",background:D}}>
@@ -353,6 +505,23 @@ function App(){
           <span style={{fontSize:11,fontWeight:700,color:"#fff",background:R,padding:"3px 10px",borderRadius:6}}>{isRS?"Regionssjef":role==="stasjonsleder"?"Stasjonsleder":"Leder"}</span>
           <span style={{fontSize:13,color:"#666"}}>{isRS?"Coaching-besøk":"Selvevaluering"}</span>
         </div>
+
+        {/* Draft recovery banner */}
+        {draft&&(
+          <div style={{background:"#fef3c7",border:"2px solid #fbbf24",borderRadius:14,padding:"14px 16px",marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <span style={{fontSize:20}}>💾</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>Du har et ulagret besøk</div>
+                <div style={{fontSize:12,color:"#78350f",marginTop:2}}>{draft.stationName} · {Object.keys(draft.scores||{}).length} punkter scoret · {new Date(draft.savedAt).toLocaleString("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={resumeDraft} style={{flex:2,padding:"10px",background:"#d97706",color:"#fff",borderRadius:10,fontSize:13,fontWeight:700}}>Fortsett besøket →</button>
+              <button onClick={discardDraft} style={{flex:1,padding:"10px",background:"#fff",color:"#92400e",border:"1px solid #fbbf24",borderRadius:10,fontSize:13,fontWeight:600}}>Forkast</button>
+            </div>
+          </div>
+        )}
 
         {/* Quick stats + Dashboard link for RS/Leder */}
         {(isRS||isLeder)&&(
@@ -581,7 +750,7 @@ function App(){
                     <Voice onText={t=>SN(item.id,(GN(item.id)?GN(item.id)+" ":"")+t)}/>
                   </div>
                 )}
-                {!ina&&<Cam photos={photos[item.id]||[]} onAdd={d=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),d]}))} onRemove={idx=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}/>}
+                {!ina&&<Cam userId={user.id} photos={photos[item.id]||[]} onAdd={d=>setPhotos(p=>({...p,[item.id]:[...(p[item.id]||[]),d]}))} onRemove={idx=>setPhotos(p=>({...p,[item.id]:(p[item.id]||[]).filter((_,i)=>i!==idx)}))}/>}
 
                 {/* Evidence required warning */}
                 {!ina&&val!==null&&val<item.max&&!GN(item.id).trim()&&!(photos[item.id]||[]).length&&(
@@ -1107,7 +1276,7 @@ function App(){
 
   return null;
 }
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App/></ErrorBoundary>);
 </script>
 </body>
 </html>
