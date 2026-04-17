@@ -197,13 +197,17 @@ function Cam({photos,onAdd,onRemove,userId}){
   const h=async e=>{
     const f=e.target.files?.[0];if(!f)return;
     e.target.value="";
+    if(!navigator.onLine){
+      alert("Du er offline. Bilder kan ikke lastes opp nå. Ta notat i stedet, så fikser vi bilde når du er online.");
+      return;
+    }
     setUploading(true);
     try{
       const{path,url}=await uploadPhoto(f,userId);
       onAdd({path,url,thumb:url});
     }catch(err){
       console.error('Upload failed:',err);
-      alert('Kunne ikke laste opp bilde: '+(err.message||'ukjent feil'));
+      alert('Kunne ikke laste opp bilde: '+(err.message||'ukjent feil')+'\n\nSjekk at storage-policy er satt i Supabase.');
     }finally{setUploading(false);}
   };
   return(
@@ -467,8 +471,10 @@ function App(){
     const goOffline=()=>setOnline(false);
     window.addEventListener('online',goOnline);
     window.addEventListener('offline',goOffline);
+    // Sync on startup if already online and user is loaded
+    if(navigator.onLine&&user)setTimeout(syncQueue,1000);
     return()=>{window.removeEventListener('online',goOnline);window.removeEventListener('offline',goOffline);};
-  },[]);
+  },[user]);
 
   // Sync queued visits when online
   const syncQueue=async()=>{
@@ -586,6 +592,8 @@ function App(){
   };
 
   const generateReport=(visit,stationName)=>{
+    // HTML escape to prevent XSS from user input (station names, notes, visit_note)
+    const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const scores=visit.scores||{};
     const naItems=visit.na_items||[];
     const notes=visit.notes||{};
@@ -597,7 +605,7 @@ function App(){
     const allItems=JOURNEY.flatMap(j=>j.items.map(i=>({...i,area:j.name,areaIcon:j.icon})));
     const date=new Date(visit.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"long",year:"numeric",hour:"2-digit",minute:"2-digit"});
 
-    const html=`<!DOCTYPE html><html lang="nb"><head><meta charset="UTF-8"><title>Besøksrapport — ${stationName}</title><style>
+    const html=`<!DOCTYPE html><html lang="nb"><head><meta charset="UTF-8"><title>Besøksrapport — ${esc(stationName)}</title><style>
       @media print{@page{margin:20mm}body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}
       body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:800px;margin:40px auto;padding:0 24px;color:#141414;line-height:1.5}
       .header{border-bottom:3px solid #CF122D;padding-bottom:16px;margin-bottom:24px}
@@ -626,7 +634,7 @@ function App(){
       @media print{.btn{display:none}}
     </style></head><body>
       <div class="header"><div class="logo">YX</div><div class="tag">Klar for Kunde — Besøksrapport</div></div>
-      <h1>${stationName}</h1>
+      <h1>${esc(stationName)}</h1>
       <div class="meta">${date} · ${visit.visit_role==='rs'?'Regionssjef':'Stasjonsleder'} · ${visit.pct}% totalt</div>
 
       <div class="score-hero">
@@ -639,16 +647,18 @@ function App(){
         ${areas.map(a=>`<div class="area"><div class="area-name">${a.icon} ${a.name}</div><div class="area-pct" style="color:${a.pct>=85?"#16a34a":a.pct>=70?"#65a30d":a.pct>=55?"#d97706":a.pct>=40?"#ea580c":"#dc2626"}">${a.pct}%</div><div class="bar"><div class="bar-fill" style="width:${a.pct}%;background:${a.pct>=85?"#16a34a":a.pct>=70?"#65a30d":a.pct>=55?"#d97706":a.pct>=40?"#ea580c":"#dc2626"}"></div></div></div>`).join('')}
       </div>
 
-      ${areas.map(a=>`<h2>${a.icon} ${a.name}</h2>${a.items.map(item=>{
+      ${areas.map(a=>`<h2>${a.icon} ${esc(a.name)}</h2>${a.items.map(item=>{
         const s=scores[String(item.id)];
         const isNA=naItems.includes(String(item.id));
         const note=notes[String(item.id)]||'';
         const lbl=isNA?'N/A':s===undefined?'—':s===0?'Ikke godkjent':s>=item.max?'Godkjent':'Delvis';
         const cls=isNA?'sc-na':s===0?'sc-fail':s>=item.max?'sc-ok':s===undefined?'sc-na':'sc-partial';
-        return`<div class="item"><div class="item-head"><div class="item-title">${item.t.replace(/ — /,' <span style="color:#666;font-weight:400">— ').concat('</span>')}</div><div class="item-score ${cls}">${lbl}${s!==undefined&&!isNA?' ('+s+'/'+item.max+')':''}</div></div>${note?`<div class="item-note">"${note}"</div>`:''}</div>`;
+        const parts=item.t.split(' — ');
+        const titleHtml=parts.length>1?`<b>${esc(parts[0])}</b> <span style="color:#666;font-weight:400">— ${esc(parts.slice(1).join(' — '))}</span>`:esc(item.t);
+        return`<div class="item"><div class="item-head"><div class="item-title">${titleHtml}</div><div class="item-score ${cls}">${lbl}${s!==undefined&&!isNA?' ('+s+'/'+item.max+')':''}</div></div>${note?`<div class="item-note">"${esc(note)}"</div>`:''}</div>`;
       }).join('')}`).join('')}
 
-      ${visit.visit_note?`<h2>📝 Oppsummering</h2><p style="color:#444;white-space:pre-wrap">${visit.visit_note}</p>`:''}
+      ${visit.visit_note&&visit.visit_note!=='[TESTDATA]'?`<h2>📝 Oppsummering</h2><p style="color:#444;white-space:pre-wrap">${esc(visit.visit_note)}</p>`:''}
 
       <div class="footer">YX Klar for Kunde · Generert ${new Date().toLocaleDateString("nb-NO")}</div>
       <button class="btn" onclick="window.print()">📄 Skriv ut / Lagre som PDF</button>
@@ -656,7 +666,10 @@ function App(){
 
     const blob=new Blob([html],{type:'text/html'});
     const url=URL.createObjectURL(blob);
-    window.open(url,'_blank');
+    const w=window.open(url,'_blank');
+    // Revoke after window loaded or after 30s max
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+    if(w){w.addEventListener('load',()=>setTimeout(()=>URL.revokeObjectURL(url),2000));}
   };
 
   const getSE=sid=>selfEvals.find(v=>v.station_id===sid);  const getSES=(se,id)=>se?.scores?.[String(id)];
@@ -676,6 +689,8 @@ function App(){
 
   const role=profile?.role;
   const isRS=role==="regionssjef";
+  const isLeder=role==="leder";
+  const isSL=role==="stasjonsleder";
   const cancelAudit=()=>{const hw=Object.keys(scores).length>0;if(hw&&!confirm("Avbryte? Alt arbeid går tapt."))return;setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setShowRef(false);setIncludeHms(null);clearAutosave();setView("home");};
 
   const resumeDraft=()=>{
@@ -1235,12 +1250,12 @@ function App(){
         else if(gap>5)tips.push({type:"gap",icon:"💬",text:`Moderat gap (${gap}pp) mellom stasjonens og din vurdering. Bruk spørsmål som «hva ser du selv når du går forplassen?» for å bygge bevissthet.`});
         else if(Math.abs(gap)<=5)tips.push({type:"gap",icon:"✅",text:`Dere er godt kalibrert (gap: ${Math.abs(gap)}pp). Fokuser på å løfte de svakeste enkeltpunktene.`});
 
-        // Per-question blind spots: SL scored high but RS scored low
+        // Per-question blind spots: SL scored godkjent but RS scored lower
         const blindSpots=JOURNEY.flatMap(j=>j.items.map(item=>{
           const slS=lastSL.scores?.[String(item.id)];
           const rsS=lastRS.scores?.[String(item.id)];
           if(slS===undefined||rsS===undefined)return null;
-          if(slS>=4&&rsS<=2)return{...item,slScore:slS,rsScore:rsS,area:j.name};
+          if(slS===item.max&&rsS<item.max)return{...item,slScore:slS,rsScore:rsS,area:j.name};
           return null;
         })).filter(Boolean);
         if(blindSpots.length>0){
@@ -1248,12 +1263,13 @@ function App(){
           tips.push({type:"blindspot",icon:"🔍",text:`Blind spots — stasjonsleder scorer høyt, du scorer lavt:\n${names.join(". ")}${blindSpots.length>3?`. +${blindSpots.length-3} til.`:""}`});
         }
 
-        // Shared problems: both scored low
+        // Shared problems: both scored below full
         const sharedLow=JOURNEY.flatMap(j=>j.items.map(item=>{
           const slS=lastSL.scores?.[String(item.id)];
           const rsS=lastRS.scores?.[String(item.id)];
           if(slS===undefined||rsS===undefined)return null;
-          if(slS<=2&&rsS<=2)return{...item,area:j.name};
+          // Both scored less than max (Ikke godkjent or Delvis)
+          if(slS<item.max&&rsS<item.max)return{...item,area:j.name};
           return null;
         })).filter(Boolean);
         if(sharedLow.length>0){
