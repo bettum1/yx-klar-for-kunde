@@ -508,7 +508,11 @@ function App(){
   };
   const login=async()=>{setLoginErr("");setLoginLoad(true);const{error}=await sb.auth.signInWithPassword({email:loginEmail,password:loginPw});if(error)setLoginErr("Feil e-post eller passord");setLoginLoad(false);};
   const logout=async()=>{
-    if(queueCount>0&&!confirm(`Du har ${queueCount} ulagrede besøk i kø. Logg ut likevel?`))return;
+    if(queueCount>0){
+      if(!confirm(`Du har ${queueCount} ulagrede besøk i kø. Logg ut likevel?`))return;
+    }else{
+      if(!confirm("Logge ut?"))return;
+    }
     clearAutosave(user?.id);
     try{localStorage.removeItem(CACHE_KEY);localStorage.removeItem(QUEUE_KEY);}catch(e){}
     await sb.auth.signOut();
@@ -749,7 +753,7 @@ function App(){
           {!online&&<span style={{fontSize:10,fontWeight:700,color:"#fff",background:"#d97706",padding:"3px 8px",borderRadius:5}}>📡 OFFLINE</span>}
           {queueCount>0&&online&&<button onClick={syncQueue} style={{fontSize:10,fontWeight:700,color:"#fff",background:"#059669",padding:"3px 8px",borderRadius:5}}>{syncing?"Synker...":`↑ ${queueCount} i kø`}</button>}
           <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
-          <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
+          <button onClick={logout} aria-label="Logg ut" style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
         </div>
       </div>
 
@@ -838,7 +842,7 @@ function App(){
             const d=loc&&s.lat?dist(s):null;
             const distTxt=d!==null&&d<500?(d<1?Math.round(d*1000)+" m":d.toFixed(1)+" km"):null;
             return(
-              <button key={s.id} onClick={()=>{if(isRS||isLeder){setStationView(s);setView("stationDetail");}else{setStation(s);setView("audit");}setShowAll(false);}} className="fadeUp" style={{background:"#fff",border:"1px solid #eae7df",borderRadius:14,padding:"14px 16px",textAlign:"left",transition:"box-shadow .15s"}}>
+              <button key={s.id} onClick={()=>{if(isRS||isLeder){setStationView(s);setView("stationDetail");}else{setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);setStation(s);setView("audit");}setShowAll(false);}} className="fadeUp" style={{background:"#fff",border:"1px solid #eae7df",borderRadius:14,padding:"14px 16px",textAlign:"left",transition:"box-shadow .15s"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -910,6 +914,14 @@ function App(){
     });
     const canAdvance=needsEvidence.length===0;
 
+    const scrollToFirstUnfinished=()=>{
+      if(needsEvidence.length===0)return true;
+      const first=needsEvidence[0];
+      const el=document.getElementById('item-'+first.id);
+      if(el){el.scrollIntoView({behavior:'smooth',block:'center'});}
+      return false;
+    };
+
     return(
       <div style={{paddingBottom:130}}>
         {/* Top banner — same as all pages */}
@@ -920,7 +932,7 @@ function App(){
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
-            <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
+            <button onClick={logout} aria-label="Logg ut" style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
           </div>
         </div>
         {/* ── Journey Hero ── */}
@@ -1070,7 +1082,7 @@ function App(){
         </div>
 
         {/* Bottom bar */}
-        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",padding:"10px 20px 14px",maxWidth:960,margin:"0 auto"}}>
+        <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",padding:"10px 20px max(14px, env(safe-area-inset-bottom))",maxWidth:960,margin:"0 auto"}}>
           {needsEvidence.length>0&&(
             <div style={{fontSize:11,color:"#991b1b",textAlign:"center",marginBottom:6,fontWeight:500}}>
               ⚠️ {needsEvidence.length} punkt{needsEvidence.length>1?"er":""} trenger bilde eller kommentar
@@ -1087,15 +1099,15 @@ function App(){
             <div>
               <div style={{fontSize:12,color:D,fontWeight:600,textAlign:"center",marginBottom:8}}>⚠️ Gjennomføre HMS-tertialpunkter på dette besøket?</div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}setIncludeHms(false);submit();}} disabled={saving} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:14,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør uten HMS"}</button>
-                <button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar først.");return;}setIncludeHms(true);setCatIdx(4);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#d97706",color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>⚠️ Ja, HMS →</button>
+                <button onClick={()=>{if(!scrollToFirstUnfinished())return;setIncludeHms(false);submit();}} disabled={saving} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:14,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør uten HMS"}</button>
+                <button onClick={()=>{if(!scrollToFirstUnfinished())return;setIncludeHms(true);setCatIdx(4);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#d97706",color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>⚠️ Ja, HMS →</button>
               </div>
             </div>
           ):(
             <div style={{display:"flex",gap:8}}>
               {catIdx>0&&<button onClick={()=>{setCatIdx(i=>i-1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:15}}>←</button>}
-              {!isLast?<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}setCatIdx(i=>i+1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:2,padding:"15px",background:canAdvance?D:"#ccc",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15}}>Neste steg →</button>
-              :<button onClick={()=>{if(!canAdvance){alert("Legg til bilde eller kommentar på alle punkter som ikke er godkjent.");return;}submit();}} disabled={saving} style={{flex:2,padding:"15px",background:canAdvance?R:"#ccc",color:"#fff",borderRadius:12,fontWeight:800,fontSize:15,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør besøk ✓"}</button>}
+              {!isLast?<button onClick={()=>{if(!scrollToFirstUnfinished())return;setCatIdx(i=>i+1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:2,padding:"15px",background:canAdvance?D:"#ccc",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15}}>Neste steg →</button>
+              :<button onClick={()=>{if(!scrollToFirstUnfinished())return;submit();}} disabled={saving} style={{flex:2,padding:"15px",background:canAdvance?R:"#ccc",color:"#fff",borderRadius:12,fontWeight:800,fontSize:15,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør besøk ✓"}</button>}
             </div>
           )}
         </div>
@@ -1316,7 +1328,7 @@ function App(){
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
-            <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
+            <button onClick={logout} aria-label="Logg ut" style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
           </div>
         </div>
         <div style={{padding:"16px 20px"}}>
@@ -1326,7 +1338,7 @@ function App(){
               <div style={{fontSize:18,fontWeight:800,color:D}}>{sv.name}</div>
               <div style={{fontSize:12,color:"#777"}}>{sv.address}, {sv.postnr} {sv.poststed} · {sv.type==="automat"?"Automat":"Fullservice"}</div>
             </div>
-            <button onClick={()=>{setStation(sv);setIncludeHms(null);setView("audit");}} style={{background:R,color:"#fff",padding:"10px 16px",borderRadius:10,fontSize:13,fontWeight:700}}>Nytt besøk</button>
+            <button onClick={()=>{setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);setStation(sv);setView("audit");}} style={{background:R,color:"#fff",padding:"10px 16px",borderRadius:10,fontSize:13,fontWeight:700}}>Nytt besøk</button>
           </div>
 
           {/* Score summary */}
@@ -1475,7 +1487,7 @@ function App(){
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
-            <button onClick={logout} style={{fontSize:11,color:"#5577aa",fontWeight:600}}>Logg ut</button>
+            <button onClick={logout} aria-label="Logg ut" style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
           </div>
         </div>
 
