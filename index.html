@@ -456,10 +456,10 @@ function App(){
     try{
       const{data:st}=await sb.from("stations").select("*").order("name");
       if(st){setStations(st);}
-      const{data:v}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);
+      const{data:v}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(500);
       if(v){setVisits(v);}
       const{data:se}=await sb.from("visits").select("*").eq("visit_role","sl").order("created_at",{ascending:false}).limit(300);setSelfEvals(se||[]);
-      const{data:ac}=await sb.from("actions").select("*").order("created_at",{ascending:false}).limit(200);setActions(ac||[]);
+      const{data:ac}=await sb.from("actions").select("*").order("created_at",{ascending:false}).limit(500);setActions(ac||[]);
       const{data:camp}=await sb.from("campaigns").select("*").eq("active",true).limit(3);setCampaigns(camp||[]);
       const{data:reg}=await sb.from("regions").select("*");setRegions(reg||[]);
       if(st&&v)saveCache(st,v);
@@ -563,7 +563,7 @@ function App(){
       }
 
       setLastVisit({...data,stationName:station.name});
-      const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(200);
+      const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(500);
       if(vv){setVisits(vv);saveCache(stations,vv);}
       setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
       clearAutosave(user?.id);setView("done");

@@ -1,5 +1,5 @@
 // YX Klar for Kunde — Service Worker
-const VERSION='v22.3';
+const VERSION='v22.4';
 const CACHE='yx-kfk-'+VERSION;
 const ASSETS=['/','/index.html'];
 
