@@ -582,7 +582,7 @@ function App(){
 
   const createAction=async(stationId,itemId,title,priority='medium')=>{
     const{data,error}=await sb.from("actions").insert({
-      station_id:stationId,item_id:String(itemId),title,priority,status:'open',created_by:user.id
+      station_id:stationId,item_id:String(itemId),description:title,priority,status:'open',created_by:user.id
     }).select().single();
     if(error){alert("Kunne ikke opprette tiltak: "+error.message);return null;}
     setActions(a=>[data,...a]);
@@ -590,13 +590,13 @@ function App(){
   };
 
   const updateAction=async(id,updates)=>{
-    const{data,error}=await sb.from("actions").update({...updates,updated_at:new Date().toISOString()}).eq("id",id).select().single();
+    const{data,error}=await sb.from("actions").update(updates).eq("id",id).select().single();
     if(error){alert("Kunne ikke oppdatere: "+error.message);return;}
     setActions(a=>a.map(x=>x.id===id?data:x));
   };
 
   const completeAction=async(id)=>{
-    await updateAction(id,{status:'done',completed_at:new Date().toISOString()});
+    await updateAction(id,{status:'completed',completed_at:new Date().toISOString(),completed_by:user.id});
   };
 
   const generateReport=(visit,stationName)=>{
@@ -965,7 +965,7 @@ function App(){
         {showRef&&<div style={{padding:16,background:"#f5f3ee"}}><img src={cat.img} style={{width:"100%",borderRadius:10,border:"2px solid #eae7df"}} alt="Referanse"/></div>}
 
         {/* Checklist items */}
-        <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{padding:"16px 16px",display:"flex",flexDirection:"column",gap:20}}>
           {cat.items.map((item,idx)=>{
             const val=G(item.id);
             const ina=isNA(item.id);
@@ -977,7 +977,7 @@ function App(){
             const gap=isRS&&seL&&myL&&seL.c!==myL.c;
 
             return(
-              <div key={item.id} className="fadeUp" style={{background:ina?"#f5f3ee":"#fff",border:ina?"1px dashed #ddd":"1px solid #eae7df",borderRadius:14,padding:"16px",opacity:ina?.4:1,animationDelay:`${idx*40}ms`}}>
+              <div key={item.id} id={`item-${item.id}`} className="fadeUp" style={{background:ina?"#f5f3ee":"#fff",border:ina?"1px dashed #ddd":"1px solid #eae7df",borderRadius:14,padding:"18px",opacity:ina?.4:1,animationDelay:`${idx*40}ms`,boxShadow:"0 1px 3px rgba(12,35,64,.04)",scrollMarginTop:"100px"}}>
                 {/* Item number + text */}
                 <div style={{display:"flex",gap:10,marginBottom:10}}>
                   <div style={{width:28,height:28,borderRadius:8,background:val!=null?lFor(item.max,val).c+"18":D+"08",color:val!=null?lFor(item.max,val).c:D,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{item.id}</div>
@@ -992,11 +992,23 @@ function App(){
                   </div>
                 )}
 
-                {/* Score buttons — 56px height */}
+                {/* Score buttons — auto-scroll to next on Godkjent */}
                 {!ina&&(
                   <div style={{display:"flex",gap:6,marginBottom:8}}>
                     {opts.map(o=>(
-                      <button key={o.v+o.l} onClick={()=>S(item.id,o.v)}
+                      <button key={o.v+o.l} onClick={()=>{
+                        S(item.id,o.v);
+                        // Auto-scroll to next item if scoring Godkjent (no evidence needed)
+                        if(o.v===item.max){
+                          const nextIdx=cat.items.findIndex(i=>i.id===item.id)+1;
+                          if(nextIdx<cat.items.length){
+                            setTimeout(()=>{
+                              const nextEl=document.getElementById('item-'+cat.items[nextIdx].id);
+                              if(nextEl)nextEl.scrollIntoView({behavior:'smooth',block:'start'});
+                            },300);
+                          }
+                        }
+                      }}
                         style={{flex:1,padding:"14px 6px",borderRadius:10,minHeight:56,background:val===o.v?o.c:"#f5f3ee",color:val===o.v?"#fff":"#777",fontSize:13,fontWeight:700,textAlign:"center",border:val===o.v?`2px solid ${o.c}`:"2px solid transparent",transition:"all .15s"}}>{o.l}</button>
                     ))}
                   </div>
@@ -1383,7 +1395,7 @@ function App(){
           {(()=>{
             const stationActions=actions.filter(a=>a.station_id===sv.id);
             const openActions=stationActions.filter(a=>a.status==='open'||a.status==='in_progress');
-            const doneActions=stationActions.filter(a=>a.status==='done');
+            const doneActions=stationActions.filter(a=>a.status==='completed');
             return(
               <>
                 {/* Unresolved items → quick-create actions */}
@@ -1423,7 +1435,7 @@ function App(){
                     {openActions.map(a=>(
                       <div key={a.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13,fontWeight:600,color:D}}>{a.title}</div>
+                          <div style={{fontSize:13,fontWeight:600,color:D}}>{a.description||a.title}</div>
                           <div style={{fontSize:11,color:"#888",marginTop:2}}>
                             Opprettet {new Date(a.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}
                             <span style={{marginLeft:8,padding:"1px 6px",borderRadius:3,fontSize:10,fontWeight:700,background:a.priority==='high'||a.priority==='critical'?"#fef2f2":a.priority==='medium'?"#fffbeb":"#f0fdf4",color:a.priority==='high'||a.priority==='critical'?"#991b1b":a.priority==='medium'?"#92400e":"#166534"}}>{a.priority==='critical'?'Kritisk':a.priority==='high'?'Høy':a.priority==='medium'?'Medium':'Lav'}</span>
