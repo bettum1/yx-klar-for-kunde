@@ -356,6 +356,28 @@ function clearFromQueue(localId){
   }catch(e){}
 }
 
+/* ── Bottom nav ── */
+function BottomNav({view,setView,operCount,actionCount}){
+  const items=[
+    {id:'home',icon:'🏠',label:'Hjem'},
+    {id:'hms',icon:'🛡️',label:'HMS'},
+    {id:'oper',icon:'📢',label:'Operativt',badge:operCount},
+    {id:'actions',icon:'📋',label:'Tiltak',badge:actionCount},
+    {id:'dash',icon:'📊',label:'Dashboard'},
+  ];
+  return(
+    <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:"1px solid #eae7df",display:"flex",zIndex:30,paddingBottom:"env(safe-area-inset-bottom)",maxWidth:960,margin:"0 auto"}}>
+      {items.map(it=>(
+        <button key={it.id} onClick={()=>setView(it.id)} style={{flex:1,padding:"10px 4px 12px",background:"transparent",position:"relative",color:view===it.id?"#CF122D":"#777",fontWeight:view===it.id?700:500}}>
+          <div style={{fontSize:20,marginBottom:2}}>{it.icon}</div>
+          <div style={{fontSize:10}}>{it.label}</div>
+          {it.badge>0&&<div style={{position:"absolute",top:6,right:"25%",background:"#CF122D",color:"#fff",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:8,minWidth:16}}>{it.badge}</div>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /* ── Error Boundary — prevents full app crash ── */
 class ErrorBoundary extends React.Component{
   constructor(p){super(p);this.state={err:null};}
@@ -413,9 +435,14 @@ function App(){
   const[campaigns,setCampaigns]=useState([]);
   const[regions,setRegions]=useState([]);
   const[actionTab,setActionTab]=useState('open');
+  const[hmsChecks,setHmsChecks]=useState([]);
+  const[operPoints,setOperPoints]=useState([]);
+  const[operAcks,setOperAcks]=useState([]);
+  const[showCompose,setShowCompose]=useState(false);
+  const[composeForm,setComposeForm]=useState({title:"",description:"",priority:"medium",due_date:"",target_scope:"all"});
 
   // Dynamic journey steps — 4 base + optional HMS
-  const journeySteps=useMemo(()=>includeHms?[...JOURNEY,hmsStep()]:JOURNEY,[includeHms]);
+  const journeySteps=JOURNEY;
 
   // Autosave on changes during audit
   useEffect(()=>{
@@ -463,6 +490,11 @@ function App(){
       const{data:ac}=await sb.from("actions").select("*").order("created_at",{ascending:false}).limit(500);setActions(ac||[]);
       const{data:camp}=await sb.from("campaigns").select("*").eq("active",true).limit(3);setCampaigns(camp||[]);
       const{data:reg}=await sb.from("regions").select("*");setRegions(reg||[]);
+      const{data:hms}=await sb.from("hms_checks").select("*").eq("year",new Date().getFullYear());setHmsChecks(hms||[]);
+      try{
+        const{data:op}=await sb.from("operative_points").select("*").eq("active",true).order("created_at",{ascending:false});setOperPoints(op||[]);
+        const{data:oa}=await sb.from("operative_ack").select("*");setOperAcks(oa||[]);
+      }catch(e){console.warn('Operative tables not yet created');setOperPoints([]);setOperAcks([]);}
       if(st&&v)saveCache(st,v);
     }catch(e){console.warn('Data load failed, using cache:',e);}
     finally{setStLoad(false);}
@@ -669,6 +701,60 @@ function App(){
     await updateAction(id,{status:'in_progress'});
   };
 
+  // ── HMS helpers ──
+  const toggleHmsCheck=async(stationId,tertial,itemId,checked)=>{
+    const year=new Date().getFullYear();
+    const existing=hmsChecks.find(c=>c.station_id===stationId&&c.tertial===tertial&&c.item_id===itemId&&c.year===year);
+    if(existing){
+      const{data,error}=await sb.from("hms_checks").update({checked,checked_by:user.id,checked_at:new Date().toISOString()}).eq("id",existing.id).select().single();
+      if(error){alert("Feil: "+error.message);return;}
+      setHmsChecks(cs=>cs.map(c=>c.id===data.id?data:c));
+    }else{
+      const{data,error}=await sb.from("hms_checks").insert({station_id:stationId,tertial,item_id:itemId,year,checked,checked_by:user.id,checked_at:new Date().toISOString()}).select().single();
+      if(error){alert("Feil: "+error.message);return;}
+      setHmsChecks(cs=>[...cs,data]);
+    }
+  };
+
+  const getStationHmsProgress=(stationId,tertial)=>{
+    const year=new Date().getFullYear();
+    const items=HMS_DATA[tertial]?.items||[];
+    const checks=hmsChecks.filter(c=>c.station_id===stationId&&c.tertial===tertial&&c.year===year&&c.checked);
+    return{done:checks.length,total:items.length};
+  };
+
+  // ── Operative helpers ──
+  const ackOperative=async(operativeId,stationId,comment,photoPath)=>{
+    const{data,error}=await sb.from("operative_ack").insert({
+      operative_id:operativeId,station_id:stationId,acknowledged_by:user.id,comment,photo_path:photoPath
+    }).select().single();
+    if(error){alert("Feil: "+error.message);return;}
+    setOperAcks(a=>[...a,data]);
+  };
+
+  const getOpAck=(operativeId,stationId)=>operAcks.find(a=>a.operative_id===operativeId&&a.station_id===stationId);
+
+  const createOperative=async()=>{
+    if(!composeForm.title.trim()){alert("Tittel er påkrevd");return;}
+    try{
+      const{data,error}=await sb.from("operative_points").insert({
+        title:composeForm.title.trim(),
+        description:composeForm.description.trim()||null,
+        priority:composeForm.priority,
+        due_date:composeForm.due_date||null,
+        target_scope:composeForm.target_scope,
+        active:true,
+        created_by:user.id
+      }).select().single();
+      if(error)throw error;
+      setOperPoints(p=>[data,...p]);
+      setShowCompose(false);
+      setComposeForm({title:"",description:"",priority:"medium",due_date:"",target_scope:"all"});
+    }catch(err){
+      alert("Kunne ikke opprette: "+(err.message||"ukjent feil")+"\n\nHusk å kjøre operative_points.sql i Supabase først.");
+    }
+  };
+
   const generateReport=(visit,stationName)=>{
     // HTML escape to prevent XSS from user input (station names, notes, visit_note)
     const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -765,6 +851,32 @@ function App(){
 
   const myRegion=useMemo(()=>profile?.region_id?regions.find(r=>r.id===profile.region_id):null,[profile,regions]);
 
+  // Scoping for the current user
+  const scopedStationsForUser=useMemo(()=>{
+    if(profile?.role==="stasjonsleder"&&profile?.station_id)return stations.filter(s=>s.id===profile.station_id);
+    if(profile?.role==="regionssjef"&&profile?.region_id)return stations.filter(s=>s.region_id===profile.region_id);
+    return stations;
+  },[stations,profile]);
+  const scopedStationIds=useMemo(()=>new Set(scopedStationsForUser.map(s=>s.id)),[scopedStationsForUser]);
+
+  // Open operative points relevant to this user — ikke kvittert ut på alle målstasjonene
+  const pendingOperCount=useMemo(()=>{
+    return operPoints.filter(op=>{
+      // Determine target stations for this point
+      let targets=[];
+      if(op.target_scope==='all')targets=scopedStationsForUser.map(s=>s.id);
+      else if(op.target_scope==='region'&&op.target_region_ids)targets=scopedStationsForUser.filter(s=>op.target_region_ids.includes(s.region_id)).map(s=>s.id);
+      else if(op.target_scope==='stations'&&op.target_station_ids)targets=op.target_station_ids.filter(id=>scopedStationIds.has(id));
+      // Check if all targets have been acknowledged
+      const unacked=targets.filter(sid=>!operAcks.find(a=>a.operative_id===op.id&&a.station_id===sid));
+      return unacked.length>0;
+    }).length;
+  },[operPoints,operAcks,scopedStationsForUser,scopedStationIds]);
+
+  const openActionCount=useMemo(()=>{
+    return actions.filter(a=>scopedStationIds.has(a.station_id)&&(a.status==='open'||a.status==='in_progress')).length;
+  },[actions,scopedStationIds]);
+
   const role=profile?.role;
   const isRS=role==="regionssjef";
   const isLeder=role==="leder";
@@ -815,7 +927,7 @@ function App(){
     const yearRS=yearVisits.filter(v=>v.visit_role==="rs");
     const yearSL=yearVisits.filter(v=>v.visit_role==="sl");
     return(
-    <div style={{paddingBottom:40}}>
+    <div style={{paddingBottom:100}}>
       {/* Header */}
       <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
         <img src={LW} alt="YX" style={{height:24}}/>
@@ -959,8 +1071,10 @@ function App(){
       )}
 
       <div style={{padding:"30px 20px 20px",textAlign:"center",color:"#aaa",fontSize:10}}>
-        YX Klar for Kunde · v19.2 · {online?"🟢 Online":"🔴 Offline"}
+        YX Klar for Kunde · v24 · {online?"🟢 Online":"🔴 Offline"}
       </div>
+
+      <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
     </div>
   );}
 
@@ -1176,22 +1290,11 @@ function App(){
             <span style={{color:"#888"}}>Totalt {tScore}/{aMax}</span>
           </div>
 
-          {/* HMS prompt — shown after step 4 if not yet asked */}
-          {catIdx===3&&includeHms===null?(
-            <div>
-              <div style={{fontSize:12,color:D,fontWeight:600,textAlign:"center",marginBottom:8}}>⚠️ Gjennomføre HMS-tertialpunkter på dette besøket?</div>
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>{if(!scrollToFirstUnfinished())return;setIncludeHms(false);submit();}} disabled={saving} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:14,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør uten HMS"}</button>
-                <button onClick={()=>{if(!scrollToFirstUnfinished())return;setIncludeHms(true);setCatIdx(4);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#d97706",color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>⚠️ Ja, HMS →</button>
-              </div>
-            </div>
-          ):(
             <div style={{display:"flex",gap:8}}>
               {catIdx>0&&<button onClick={()=>{setCatIdx(i=>i-1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:1,padding:"15px",background:"#f0ede5",borderRadius:12,fontWeight:700,color:"#555",fontSize:15}}>←</button>}
               {!isLast?<button onClick={()=>{if(!scrollToFirstUnfinished())return;setCatIdx(i=>i+1);setShowRef(false);window.scrollTo(0,0);}} style={{flex:2,padding:"15px",background:canAdvance?D:"#ccc",color:"#fff",borderRadius:12,fontWeight:700,fontSize:15}}>Neste steg →</button>
               :<button onClick={()=>{if(!scrollToFirstUnfinished())return;submit();}} disabled={saving} style={{flex:2,padding:"15px",background:canAdvance?R:"#ccc",color:"#fff",borderRadius:12,fontWeight:800,fontSize:15,opacity:saving?.6:1}}>{saving?"Lagrer...":"Fullfør besøk ✓"}</button>}
             </div>
-          )}
         </div>
       </div>
     );
@@ -1412,7 +1515,7 @@ function App(){
     })();
 
     return(
-      <div style={{paddingBottom:40}}>
+      <div style={{paddingBottom:100}}>
         <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <button onClick={()=>{setStationView(null);setView("home");}} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>←</button>
@@ -1550,11 +1653,318 @@ function App(){
             </div>
           ))}
         </div>
+
+        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
       </div>
     );
   }
 
   /* ── DASHBOARD ── */
+  /* ── HMS-ÅRSHJUL ── */
+  if(view==="hms"){
+    const curTertial=curT();
+    const tertialInfo={t1:{name:"1. tertial",period:"Jan–Apr",endDate:"30. april"},t2:{name:"2. tertial",period:"Mai–Aug",endDate:"31. august"},t3:{name:"3. tertial",period:"Sep–Des",endDate:"31. desember"}};
+
+    // For stasjonsleder: vis kun egen stasjon. For RS/leder: vis alle i region
+    const stationsToShow=scopedStationsForUser;
+
+    // Overall progress: hvor mange stasjoner har fullført tertialet
+    const completedStations=stationsToShow.filter(s=>{
+      const p=getStationHmsProgress(s.id,curTertial);
+      return p.done===p.total&&p.total>0;
+    }).length;
+
+    // Stasjoner etter status (for RS-oversikt)
+    const stationStatus=stationsToShow.map(s=>{
+      const p=getStationHmsProgress(s.id,curTertial);
+      return{...s,done:p.done,total:p.total,pct:p.total>0?Math.round(p.done/p.total*100):0};
+    }).sort((a,b)=>a.pct-b.pct);
+
+    return(
+      <div style={{paddingBottom:100}}>
+        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
+          <img src={LW} alt="YX" style={{height:24}}/>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
+            <button onClick={logout} style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
+          </div>
+        </div>
+
+        <div style={{padding:"16px 20px"}}>
+          <div style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:2,marginBottom:6}}>HMS-årshjul {new Date().getFullYear()}</div>
+          <div style={{fontSize:24,fontWeight:800,color:D,marginBottom:4}}>{tertialInfo[curTertial].name}</div>
+          <div style={{fontSize:13,color:"#666",marginBottom:16}}>{tertialInfo[curTertial].period} · lukkes {tertialInfo[curTertial].endDate}</div>
+
+          {/* Overall progress bar */}
+          <div style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px 16px",marginBottom:20}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <span style={{fontSize:13,fontWeight:600,color:D}}>Fullført av stasjoner</span>
+              <span style={{fontSize:14,fontWeight:800,color:completedStations===stationsToShow.length?"#16a34a":"#d97706"}}>{completedStations}/{stationsToShow.length}</span>
+            </div>
+            <div style={{height:8,background:"#f0ede5",borderRadius:4,overflow:"hidden"}}>
+              <div style={{height:"100%",width:stationsToShow.length>0?(completedStations/stationsToShow.length*100)+"%":"0%",background:"#16a34a",borderRadius:4,transition:"width .5s"}}/>
+            </div>
+          </div>
+
+          {/* For stasjonsleder — vis tertialpunktene direkte */}
+          {isSL&&profile.station_id&&(()=>{
+            const items=HMS_DATA[curTertial].items;
+            return(
+              <>
+                <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:10}}>Tertialpunkter ({items.filter(it=>hmsChecks.find(c=>c.station_id===profile.station_id&&c.item_id===it.id&&c.tertial===curTertial&&c.checked)).length}/{items.length})</div>
+                {items.map(item=>{
+                  const check=hmsChecks.find(c=>c.station_id===profile.station_id&&c.item_id===item.id&&c.tertial===curTertial);
+                  const done=check?.checked;
+                  return(
+                    <div key={item.id} style={{background:"#fff",border:`1px solid ${done?"#bbf7d0":"#eae7df"}`,borderRadius:12,padding:"14px 16px",marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                        <button onClick={()=>toggleHmsCheck(profile.station_id,curTertial,item.id,!done)} aria-label={done?"Fjern hake":"Kryss av"} style={{width:26,height:26,borderRadius:6,border:done?"2px solid #16a34a":"2px solid #ccc",background:done?"#16a34a":"#fff",color:"#fff",fontSize:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",marginTop:2}}>{done?"✓":""}</button>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:14,fontWeight:600,color:D,textDecoration:done?"none":"none",opacity:done?.6:1}}>{item.t}</div>
+                          {done&&check?.checked_at&&<div style={{fontSize:11,color:"#888",marginTop:4}}>Gjennomført {new Date(check.checked_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            );
+          })()}
+
+          {/* For RS/leder — liste over stasjoner og deres status */}
+          {(isRS||isLeder)&&(
+            <>
+              <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:10}}>Stasjoner etter status</div>
+              {stationStatus.map(s=>(
+                <button key={s.id} onClick={()=>{setStationView(s);setView("stationDetail");}} style={{width:"100%",background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"12px 14px",marginBottom:6,display:"flex",alignItems:"center",gap:10,textAlign:"left"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:600,color:D,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
+                    <div style={{fontSize:11,color:"#888",marginTop:2}}>{s.poststed}</div>
+                  </div>
+                  <div style={{fontSize:11,color:"#888",textAlign:"right",flexShrink:0}}>
+                    <div style={{fontSize:14,fontWeight:800,color:s.pct===100?"#16a34a":s.pct>=60?"#d97706":"#dc2626"}}>{s.done}/{s.total}</div>
+                    <div>{s.pct}%</div>
+                  </div>
+                </button>
+              ))}
+              {stationStatus.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"#888",fontSize:13}}>Ingen stasjoner i region</div>}
+            </>
+          )}
+        </div>
+
+        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+      </div>
+    );
+  }
+
+  /* ── OPERATIVE HMS-PUNKTER ── */
+  if(view==="oper"){
+    // Liste over alle aktive operative punkter — markér hvilke som er utkvittert for brukerens stasjon(er)
+    const active=operPoints.filter(op=>op.active);
+
+    const pointsWithStatus=active.map(op=>{
+      let targets=[];
+      if(op.target_scope==='all')targets=scopedStationsForUser.map(s=>s.id);
+      else if(op.target_scope==='region'&&op.target_region_ids)targets=scopedStationsForUser.filter(s=>op.target_region_ids.includes(s.region_id)).map(s=>s.id);
+      else if(op.target_scope==='stations'&&op.target_station_ids)targets=op.target_station_ids.filter(id=>scopedStationIds.has(id));
+      const acked=targets.filter(sid=>operAcks.find(a=>a.operative_id===op.id&&a.station_id===sid)).length;
+      return{...op,targetCount:targets.length,ackedCount:acked,targets};
+    }).filter(op=>op.targetCount>0);
+
+    const pending=pointsWithStatus.filter(op=>op.ackedCount<op.targetCount);
+    const completed=pointsWithStatus.filter(op=>op.ackedCount===op.targetCount&&op.targetCount>0);
+    return(
+      <div style={{paddingBottom:100}}>
+        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
+          <img src={LW} alt="YX" style={{height:24}}/>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
+            <button onClick={logout} style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
+          </div>
+        </div>
+
+        <div style={{padding:"16px 20px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div>
+              <div style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:2,marginBottom:6}}>Operative HMS-punkter</div>
+              <div style={{fontSize:22,fontWeight:800,color:D}}>Ad-hoc krav og pålegg</div>
+            </div>
+            {isLeder&&<button onClick={()=>setShowCompose(true)} style={{padding:"10px 16px",background:R,color:"#fff",borderRadius:10,fontSize:13,fontWeight:700}}>+ Nytt punkt</button>}
+          </div>
+
+          {/* Compose modal */}
+          {showCompose&&(
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:50,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+              <div style={{background:"#fff",borderRadius:14,padding:20,width:"100%",maxWidth:440,maxHeight:"90vh",overflow:"auto"}}>
+                <div style={{fontSize:18,fontWeight:800,color:D,marginBottom:16}}>Nytt operativt punkt</div>
+                <label style={{display:"block",fontSize:12,fontWeight:600,color:"#555",marginBottom:4}}>Tittel *</label>
+                <input type="text" value={composeForm.title} onChange={e=>setComposeForm(f=>({...f,title:e.target.value}))} placeholder="F.eks. Sjekk for skimmingutstyr" style={{width:"100%",padding:"10px 12px",fontSize:14,border:"1px solid #eae7df",borderRadius:8,marginBottom:12}}/>
+
+                <label style={{display:"block",fontSize:12,fontWeight:600,color:"#555",marginBottom:4}}>Beskrivelse</label>
+                <textarea value={composeForm.description} onChange={e=>setComposeForm(f=>({...f,description:e.target.value}))} placeholder="Detaljer, hva må gjøres, referanser" rows={4} style={{width:"100%",padding:"10px 12px",fontSize:14,border:"1px solid #eae7df",borderRadius:8,marginBottom:12,fontFamily:"inherit",resize:"vertical"}}/>
+
+                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                  <div style={{flex:1}}>
+                    <label style={{display:"block",fontSize:12,fontWeight:600,color:"#555",marginBottom:4}}>Prioritet</label>
+                    <select value={composeForm.priority} onChange={e=>setComposeForm(f=>({...f,priority:e.target.value}))} style={{width:"100%",padding:"10px 12px",fontSize:14,border:"1px solid #eae7df",borderRadius:8}}>
+                      <option value="low">Lav</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">Høy</option>
+                      <option value="critical">Kritisk</option>
+                    </select>
+                  </div>
+                  <div style={{flex:1}}>
+                    <label style={{display:"block",fontSize:12,fontWeight:600,color:"#555",marginBottom:4}}>Frist</label>
+                    <input type="date" value={composeForm.due_date} onChange={e=>setComposeForm(f=>({...f,due_date:e.target.value}))} style={{width:"100%",padding:"10px 12px",fontSize:14,border:"1px solid #eae7df",borderRadius:8}}/>
+                  </div>
+                </div>
+
+                <label style={{display:"block",fontSize:12,fontWeight:600,color:"#555",marginBottom:4}}>Målgruppe</label>
+                <select value={composeForm.target_scope} onChange={e=>setComposeForm(f=>({...f,target_scope:e.target.value}))} style={{width:"100%",padding:"10px 12px",fontSize:14,border:"1px solid #eae7df",borderRadius:8,marginBottom:16}}>
+                  <option value="all">Alle stasjoner (273)</option>
+                  <option value="region">Én region (kommer)</option>
+                  <option value="stations">Utvalgte stasjoner (kommer)</option>
+                </select>
+
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>setShowCompose(false)} style={{flex:1,padding:"12px",background:"#f0ede5",color:"#555",borderRadius:10,fontWeight:700,fontSize:14}}>Avbryt</button>
+                  <button onClick={createOperative} style={{flex:2,padding:"12px",background:R,color:"#fff",borderRadius:10,fontWeight:700,fontSize:14}}>Send ut</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {pending.length>0&&(
+            <>
+              <div style={{fontSize:14,fontWeight:700,color:"#dc2626",marginBottom:10}}>🔴 Aktive — krever handling</div>
+              {pending.map(op=>{
+                const daysLeft=op.due_date?Math.ceil((new Date(op.due_date)-new Date())/(86400000)):null;
+                const urgent=daysLeft!==null&&daysLeft<=2;
+                return(
+                  <div key={op.id} style={{background:"#fff",border:`1px solid ${urgent?"#fecaca":"#eae7df"}`,borderRadius:12,padding:"14px 16px",marginBottom:8}}>
+                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
+                      <div style={{fontSize:15,fontWeight:700,color:D,flex:1}}>{op.title}</div>
+                      {op.priority==='high'||op.priority==='critical'?<span style={{fontSize:10,fontWeight:700,color:"#fff",background:"#dc2626",padding:"3px 8px",borderRadius:4,flexShrink:0}}>HØY</span>:null}
+                    </div>
+                    {op.description&&<div style={{fontSize:13,color:"#555",marginBottom:10,whiteSpace:"pre-wrap"}}>{op.description}</div>}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12}}>
+                      <span style={{color:"#666"}}>Kvittert: <b>{op.ackedCount}/{op.targetCount}</b></span>
+                      {op.due_date&&<span style={{color:urgent?"#dc2626":"#666",fontWeight:urgent?700:400}}>
+                        {daysLeft<0?`Forfalt ${Math.abs(daysLeft)} d siden`:daysLeft===0?"Frist i dag":`Frist om ${daysLeft} d`}
+                      </span>}
+                    </div>
+                    <div style={{height:4,background:"#f0ede5",borderRadius:2,marginTop:8,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:(op.ackedCount/op.targetCount*100)+"%",background:"#16a34a"}}/>
+                    </div>
+                    {/* Kvitteringsknapper per stasjon i scope */}
+                    {op.targets.length>0&&(
+                      <div style={{marginTop:12,paddingTop:12,borderTop:"1px dashed #eee"}}>
+                        {op.targets.map(sid=>{
+                          const st=stations.find(s=>s.id===sid);
+                          if(!st)return null;
+                          const ack=getOpAck(op.id,sid);
+                          return(
+                            <div key={sid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0"}}>
+                              <div style={{fontSize:12,color:D,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
+                              {ack?<span style={{fontSize:11,color:"#16a34a",fontWeight:700}}>✓ Kvittert {new Date(ack.acknowledged_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}</span>:
+                                <button onClick={()=>ackOperative(op.id,sid,null,null)} style={{fontSize:11,fontWeight:700,color:"#fff",background:R,padding:"6px 12px",borderRadius:6}}>Kvitter ut</button>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {pending.length===0&&completed.length===0&&(
+            <div style={{textAlign:"center",padding:"60px 20px",color:"#888"}}>
+              <div style={{fontSize:40,marginBottom:10}}>📢</div>
+              <div style={{fontSize:14,fontWeight:600,color:"#555"}}>Ingen aktive operative punkter</div>
+              <div style={{fontSize:12,marginTop:6}}>Når sentralt sender ut ad-hoc krav (skimming, smittevern, IK-mat) dukker de opp her.</div>
+            </div>
+          )}
+
+          {completed.length>0&&(
+            <>
+              <div style={{fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:10,marginTop:24}}>🟢 Fullført</div>
+              {completed.map(op=>(
+                <div key={op.id} style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{fontSize:13,fontWeight:600,color:D}}>{op.title}</div>
+                  <div style={{fontSize:11,color:"#16a34a",fontWeight:700}}>{op.ackedCount}/{op.targetCount} ✓</div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+      </div>
+    );
+  }
+
+  /* ── ALLE TILTAK (på tvers av stasjoner) ── */
+  if(view==="actions"){
+    const myActions=actions.filter(a=>scopedStationIds.has(a.station_id));
+    const openA=myActions.filter(a=>a.status==='open');
+    const inProgA=myActions.filter(a=>a.status==='in_progress');
+    const doneA=myActions.filter(a=>a.status==='completed');
+    const shown=actionTab==='open'?openA:actionTab==='in_progress'?inProgA:doneA;
+
+    return(
+      <div style={{paddingBottom:100}}>
+        <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
+          <img src={LW} alt="YX" style={{height:24}}/>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
+            <button onClick={logout} style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
+          </div>
+        </div>
+
+        <div style={{padding:"16px 20px"}}>
+          <div style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:2,marginBottom:6}}>Alle tiltak</div>
+          <div style={{fontSize:22,fontWeight:800,color:D,marginBottom:16}}>{myRegion?`Region ${myRegion.name}`:"Alle regioner"}</div>
+
+          <div style={{display:"flex",gap:6,marginBottom:16,background:"#f5f3ee",padding:4,borderRadius:10}}>
+            {[['open','Åpne',openA.length,"#dc2626"],['in_progress','Under arbeid',inProgA.length,"#d97706"],['completed','Lukket',doneA.length,"#16a34a"]].map(([key,label,count,color])=>(
+              <button key={key} onClick={()=>setActionTab(key)} style={{flex:1,padding:"10px 6px",borderRadius:8,background:actionTab===key?"#fff":"transparent",color:actionTab===key?color:"#777",fontSize:12,fontWeight:700}}>{label} <b>{count}</b></button>
+            ))}
+          </div>
+
+          {shown.length===0&&<div style={{textAlign:"center",padding:"40px 20px",color:"#888",fontSize:13}}>Ingen tiltak i denne kategorien</div>}
+
+          {shown.map(a=>{
+            const st=stations.find(s=>s.id===a.station_id);
+            const allItems=JOURNEY.flatMap(j=>j.items).concat(HMS_DATA.t1.items,HMS_DATA.t2.items,HMS_DATA.t3.items);
+            const item=allItems.find(i=>String(i.id)===String(a.item_id));
+            return(
+              <div key={a.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px 16px",marginBottom:8}}>
+                <div style={{fontSize:11,color:"#888",marginBottom:4}}>{st?.name||"Ukjent stasjon"}</div>
+                <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:2}}>{a.description||item?.t?.split(' — ')[0]||'Tiltak'}</div>
+                <div style={{fontSize:11,color:"#888"}}>Opprettet {new Date(a.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}
+                  {a.priority==='high'&&<span style={{marginLeft:8,padding:"1px 6px",borderRadius:3,fontSize:10,fontWeight:700,background:"#fef2f2",color:"#991b1b"}}>Høy</span>}
+                </div>
+                <div style={{display:"flex",gap:6,marginTop:10}}>
+                  {a.status==='open'&&<>
+                    <button onClick={()=>startAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#d97706",background:"#fffbeb",border:"1px solid #fde68a",padding:"8px",borderRadius:6,minHeight:34}}>Sett under arbeid</button>
+                    <button onClick={()=>completeAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#fff",background:"#16a34a",padding:"8px",borderRadius:6,minHeight:34}}>✓ Lukk</button>
+                  </>}
+                  {a.status==='in_progress'&&<button onClick={()=>completeAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#fff",background:"#16a34a",padding:"8px",borderRadius:6,minHeight:34}}>✓ Lukk</button>}
+                  {a.status==='completed'&&<button onClick={()=>reopenAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#555",background:"#f5f3ee",padding:"8px",borderRadius:6,minHeight:34}}>↻ Åpne igjen</button>}
+                  {st&&<button onClick={()=>{setStationView(st);setView("stationDetail");}} style={{fontSize:12,fontWeight:600,color:"#555",background:"transparent",padding:"8px 12px"}}>Se stasjon →</button>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+      </div>
+    );
+  }
+
   if(view==="dash"){
     const scopedStations=isRS&&profile?.region_id?stations.filter(s=>s.region_id===profile.region_id):stations;
     const scopedIds=new Set(scopedStations.map(s=>s.id));
@@ -1571,7 +1981,7 @@ function App(){
     const visited=new Set(rsV.concat(slV).map(v=>v.station_id)).size;
 
     return(
-      <div style={{paddingBottom:40}}>
+      <div style={{paddingBottom:100}}>
         <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <button onClick={()=>setView("home")} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>←</button>
@@ -1722,6 +2132,8 @@ function App(){
 
           {stScores.length===0&&<div style={{textAlign:"center",padding:40,color:"#888"}}>Ingen besøk registrert ennå</div>}
         </div>
+
+        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
       </div>
     );
   }
