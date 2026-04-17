@@ -1110,13 +1110,11 @@ function App(){
       <div style={{paddingBottom:130}}>
         {/* Top banner — same as all pages */}
         <div style={{background:D,padding:"10px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={cancelAudit} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>←</button>
-            <img src={LW} alt="YX" style={{height:22}}/>
-          </div>
+          <button onClick={cancelAudit} style={{color:"#fff",fontSize:14,fontWeight:600,display:"flex",alignItems:"center",gap:6,padding:"8px 12px 8px 0",minHeight:36}}>
+            <span style={{fontSize:18}}>←</span> Avbryt
+          </button>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
-            <button onClick={logout} aria-label="Logg ut" style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
           </div>
         </div>
         {/* ── Journey Hero ── */}
@@ -1517,10 +1515,9 @@ function App(){
     return(
       <div style={{paddingBottom:100}}>
         <div style={{background:D,padding:"14px 20px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,zIndex:20}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <button onClick={()=>{setStationView(null);setView("home");}} style={{color:"#7799bb",fontSize:13,fontWeight:600}}>←</button>
-            <img src={LW} alt="YX" style={{height:24}}/>
-          </div>
+          <button onClick={()=>{setStationView(null);setView("home");}} style={{color:"#fff",fontSize:14,fontWeight:600,display:"flex",alignItems:"center",gap:6,padding:"8px 12px 8px 0",minHeight:36}}>
+            <span style={{fontSize:18}}>←</span> Tilbake
+          </button>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{fontSize:11,color:"#7799bb"}}>{profile?.name}</span>
             <button onClick={logout} aria-label="Logg ut" style={{fontSize:12,color:"#5577aa",fontWeight:600,padding:"6px 10px",minHeight:32}}>Logg ut</button>
