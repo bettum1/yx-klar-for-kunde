@@ -412,6 +412,7 @@ function App(){
   const[actions,setActions]=useState([]);
   const[campaigns,setCampaigns]=useState([]);
   const[regions,setRegions]=useState([]);
+  const[actionTab,setActionTab]=useState('open');
 
   // Dynamic journey steps — 4 base + optional HMS
   const journeySteps=useMemo(()=>includeHms?[...JOURNEY,hmsStep()]:JOURNEY,[includeHms]);
@@ -562,7 +563,49 @@ function App(){
         }
       }
 
-      setLastVisit({...data,stationName:station.name});
+      // ── Auto-sync actions with scores ──
+      const stationActions=actions.filter(a=>a.station_id===station.id);
+      const allItems=JOURNEY.flatMap(j=>j.items);
+      if(includeHms)allItems.push(...HMS_DATA[curT()].items);
+
+      // 1. Auto-close existing open actions where user scored Godkjent (full marks)
+      const toClose=stationActions.filter(a=>{
+        if(a.status!=='open'&&a.status!=='in_progress')return false;
+        const itemId=String(a.item_id);
+        const scoreNow=scores[itemId];
+        const item=allItems.find(i=>String(i.id)===itemId);
+        return item&&scoreNow===item.max;
+      });
+      for(const a of toClose){
+        await sb.from("actions").update({status:'completed',completed_at:new Date().toISOString(),completed_by:user.id}).eq("id",a.id);
+      }
+
+      // 2. Auto-create actions for non-approved items (where no open action exists)
+      const toCreate=[];
+      for(const[itemIdStr,s]of Object.entries(scores)){
+        const item=allItems.find(i=>String(i.id)===itemIdStr);
+        if(!item)continue;
+        if(na[itemIdStr])continue;
+        if(s>=item.max)continue; // Godkjent — no action needed
+        // Skip if there's already an open action for this item
+        const existing=stationActions.find(a=>String(a.item_id)===itemIdStr&&(a.status==='open'||a.status==='in_progress'));
+        if(existing)continue;
+        const title=item.t.split(" — ")[0];
+        toCreate.push({
+          station_id:station.id,visit_id:data.id,item_id:itemIdStr,
+          description:title,priority:s===0?'high':'medium',
+          status:'open',created_by:user.id
+        });
+      }
+      if(toCreate.length>0){
+        await sb.from("actions").insert(toCreate);
+      }
+
+      // Reload actions
+      const{data:ac}=await sb.from("actions").select("*").order("created_at",{ascending:false}).limit(500);
+      if(ac)setActions(ac);
+
+      setLastVisit({...data,stationName:station.name,autoActions:{closed:toClose.length,created:toCreate.length}});
       const{data:vv}=await sb.from("visits").select("*").order("created_at",{ascending:false}).limit(500);
       if(vv){setVisits(vv);saveCache(stations,vv);}
       setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);
@@ -597,6 +640,14 @@ function App(){
 
   const completeAction=async(id)=>{
     await updateAction(id,{status:'completed',completed_at:new Date().toISOString(),completed_by:user.id});
+  };
+
+  const reopenAction=async(id)=>{
+    await updateAction(id,{status:'open',completed_at:null,completed_by:null});
+  };
+
+  const startAction=async(id)=>{
+    await updateAction(id,{status:'in_progress'});
   };
 
   const generateReport=(visit,stationName)=>{
@@ -1233,6 +1284,15 @@ function App(){
           ))}
         </div>
 
+        {/* Auto-action summary */}
+        {v.autoActions&&(v.autoActions.closed>0||v.autoActions.created>0)&&(
+          <div className="fadeUp" style={{width:"100%",maxWidth:400,marginTop:12,background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.1)",borderRadius:12,padding:"12px 14px",animationDelay:"420ms"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#fff",marginBottom:6}}>📋 Tiltak oppdatert automatisk</div>
+            {v.autoActions.created>0&&<div style={{fontSize:12,color:"rgba(255,255,255,.75)"}}>🔴 {v.autoActions.created} nye tiltak opprettet for punkter som ikke ble godkjent</div>}
+            {v.autoActions.closed>0&&<div style={{fontSize:12,color:"rgba(255,255,255,.75)",marginTop:2}}>🟢 {v.autoActions.closed} tiltak automatisk lukket (scoret Godkjent)</div>}
+          </div>
+        )}
+
         <div className="fadeUp" style={{color:"#4ade80",fontSize:12,marginTop:16,fontWeight:600,animationDelay:"450ms"}}>✓ Lagret i database</div>
         <div className="fadeUp" style={{display:"flex",gap:10,marginTop:28,animationDelay:"500ms"}}>
           <button onClick={()=>generateReport(v,v.stationName)} style={{padding:"15px 24px",background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.2)",color:"#fff",borderRadius:12,fontWeight:700,fontSize:14}}>📄 PDF-rapport</button>
@@ -1391,70 +1451,66 @@ function App(){
             </div>
           )}
 
-          {/* Open actions for this station */}
+          {/* ── Tiltak ── one clear list with tabs */}
           {(()=>{
             const stationActions=actions.filter(a=>a.station_id===sv.id);
-            const openActions=stationActions.filter(a=>a.status==='open'||a.status==='in_progress');
-            const doneActions=stationActions.filter(a=>a.status==='completed');
+            const openA=stationActions.filter(a=>a.status==='open');
+            const inProgA=stationActions.filter(a=>a.status==='in_progress');
+            const doneA=stationActions.filter(a=>a.status==='completed');
+            const shown=actionTab==='open'?openA:actionTab==='in_progress'?inProgA:doneA;
+            const allItems=JOURNEY.flatMap(j=>j.items).concat(HMS_DATA.t1.items,HMS_DATA.t2.items,HMS_DATA.t3.items);
+
+            if(stationActions.length===0)return null;
             return(
-              <>
-                {/* Unresolved items → quick-create actions */}
-                {unresolved.length>0&&(
-                  <div style={{marginBottom:20}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                      <div style={{fontSize:14,fontWeight:700,color:D}}>⚠️ Åpne punkter fra forrige besøk</div>
-                      <div style={{fontSize:11,color:"#888"}}>{unresolved.length} punkt{unresolved.length>1?"er":""}</div>
-                    </div>
-                    {unresolved.map(item=>{
-                      const existingAction=stationActions.find(a=>String(a.item_id)===String(item.id)&&(a.status==='open'||a.status==='in_progress'));
-                      return(
-                        <div key={item.id} style={{background:"#fff",border:"1px solid #fecaca",borderRadius:10,padding:"10px 14px",marginBottom:4}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                            <div style={{fontSize:13,color:D,flex:1}}>{item.t.includes(" — ")?<><span style={{fontWeight:700}}>{item.t.split(" — ")[0]}</span><span style={{fontWeight:400,color:"#555"}}> — {item.t.split(" — ").slice(1).join(" — ")}</span></>:<span style={{fontWeight:600}}>{item.t}</span>}</div>
-                            <div style={{background:item.score===0?"#dc2626":"#d97706",color:"#fff",padding:"2px 6px",borderRadius:4,fontSize:10,fontWeight:700,flexShrink:0}}>{item.score===0?"Ikke godkjent":"Delvis"}</div>
-                          </div>
-                          {item.note&&<div style={{fontSize:11,color:"#666",marginTop:4,fontStyle:"italic"}}>"{item.note}"</div>}
-                          {existingAction?(
-                            <div style={{display:"flex",gap:6,marginTop:10,alignItems:"center",padding:"6px 10px",background:"#f0fdf4",borderRadius:6,border:"1px solid #bbf7d0"}}>
-                              <span style={{fontSize:12,color:"#059669",fontWeight:600,flex:1}}>✓ Tiltak opprettet</span>
-                              <button onClick={async()=>{await completeAction(existingAction.id);}} style={{fontSize:12,fontWeight:700,color:"#fff",background:"#16a34a",padding:"6px 12px",borderRadius:6,minHeight:32}}>Lukk tiltak</button>
-                            </div>
-                          ):(
-                            <button onClick={async()=>{
-                              const t=item.t.split(" — ")[0];
-                              const result=await createAction(sv.id,item.id,t,item.score===0?'high':'medium');
-                              if(result){/* silent success - UI updates via setActions */}
-                            }} style={{marginTop:10,fontSize:13,fontWeight:700,color:"#fff",background:R,padding:"10px 16px",borderRadius:8,minHeight:36,width:"100%"}}>+ Opprett tiltak</button>
-                          )}
-                        </div>
-                      );
-                    })}
+              <div style={{marginBottom:20}}>
+                <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:10}}>📋 Tiltak</div>
+                <div style={{display:"flex",gap:6,marginBottom:10,background:"#f5f3ee",padding:4,borderRadius:10}}>
+                  {[['open',`Åpne`,openA.length,"#dc2626"],['in_progress',`Under arbeid`,inProgA.length,"#d97706"],['completed',`Lukket`,doneA.length,"#16a34a"]].map(([key,label,count,color])=>(
+                    <button key={key} onClick={()=>setActionTab(key)} style={{flex:1,padding:"8px 6px",borderRadius:8,background:actionTab===key?"#fff":"transparent",color:actionTab===key?color:"#777",fontSize:12,fontWeight:700,boxShadow:actionTab===key?"0 1px 3px rgba(0,0,0,.08)":"none"}}>
+                      {label} <span style={{fontWeight:800}}>{count}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {shown.length===0&&(
+                  <div style={{textAlign:"center",padding:"24px 16px",color:"#888",fontSize:13,background:"#fafaf7",borderRadius:10}}>
+                    {actionTab==='open'?'Ingen åpne tiltak':actionTab==='in_progress'?'Ingen tiltak under arbeid':'Ingen lukkede tiltak ennå'}
                   </div>
                 )}
 
-                {/* All open actions */}
-                {openActions.length>0&&(
-                  <div style={{marginBottom:20}}>
-                    <div style={{fontSize:14,fontWeight:700,color:D,marginBottom:8}}>📋 Åpne tiltak ({openActions.length})</div>
-                    {openActions.map(a=>(
-                      <div key={a.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:10,padding:"10px 14px",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                {shown.map(a=>{
+                  const item=allItems.find(i=>String(i.id)===String(a.item_id));
+                  const title=a.description||item?.t?.split(' — ')[0]||'Tiltak';
+                  const fullItem=item?.t||'';
+                  const isOpen=a.status==='open';
+                  const isProg=a.status==='in_progress';
+                  const isDone=a.status==='completed';
+                  const dotColor=isOpen?"#dc2626":isProg?"#d97706":"#16a34a";
+                  return(
+                    <div key={a.id} style={{background:"#fff",border:"1px solid #eae7df",borderRadius:12,padding:"14px 16px",marginBottom:8}}>
+                      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                        <div style={{width:10,height:10,borderRadius:5,background:dotColor,marginTop:6,flexShrink:0}}/>
                         <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:13,fontWeight:600,color:D}}>{a.description||a.title}</div>
-                          <div style={{fontSize:11,color:"#888",marginTop:2}}>
-                            Opprettet {new Date(a.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}
-                            <span style={{marginLeft:8,padding:"1px 6px",borderRadius:3,fontSize:10,fontWeight:700,background:a.priority==='high'||a.priority==='critical'?"#fef2f2":a.priority==='medium'?"#fffbeb":"#f0fdf4",color:a.priority==='high'||a.priority==='critical'?"#991b1b":a.priority==='medium'?"#92400e":"#166534"}}>{a.priority==='critical'?'Kritisk':a.priority==='high'?'Høy':a.priority==='medium'?'Medium':'Lav'}</span>
+                          <div style={{fontSize:14,fontWeight:700,color:D}}>{title}</div>
+                          {fullItem.includes(' — ')&&<div style={{fontSize:12,color:"#666",marginTop:2}}>{fullItem.split(' — ').slice(1).join(' — ')}</div>}
+                          <div style={{fontSize:11,color:"#888",marginTop:6}}>
+                            {isDone?`Lukket ${new Date(a.completed_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}`:`Opprettet ${new Date(a.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}`}
+                            {a.priority==='high'&&!isDone&&<span style={{marginLeft:8,padding:"1px 6px",borderRadius:3,fontSize:10,fontWeight:700,background:"#fef2f2",color:"#991b1b"}}>Høy</span>}
                           </div>
                         </div>
-                        <button onClick={()=>completeAction(a.id)} style={{fontSize:11,fontWeight:700,color:"#fff",background:"#16a34a",padding:"6px 12px",borderRadius:6,flexShrink:0}}>✓ Lukk</button>
                       </div>
-                    ))}
-                  </div>
-                )}
-
-                {doneActions.length>0&&(
-                  <div style={{marginBottom:16,fontSize:11,color:"#16a34a"}}>✓ {doneActions.length} tiltak fullført</div>
-                )}
-              </>
+                      <div style={{display:"flex",gap:6,marginTop:10}}>
+                        {isOpen&&<>
+                          <button onClick={()=>startAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#d97706",background:"#fffbeb",border:"1px solid #fde68a",padding:"8px",borderRadius:6,minHeight:34}}>Sett under arbeid</button>
+                          <button onClick={()=>completeAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#fff",background:"#16a34a",padding:"8px",borderRadius:6,minHeight:34}}>✓ Lukk</button>
+                        </>}
+                        {isProg&&<button onClick={()=>completeAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#fff",background:"#16a34a",padding:"8px",borderRadius:6,minHeight:34}}>✓ Lukk</button>}
+                        {isDone&&<button onClick={()=>reopenAction(a.id)} style={{flex:1,fontSize:12,fontWeight:700,color:"#555",background:"#f5f3ee",padding:"8px",borderRadius:6,minHeight:34}}>↻ Åpne igjen</button>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             );
           })()}
 
