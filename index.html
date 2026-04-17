@@ -2,7 +2,7 @@
 <html lang="nb">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0C2340">
 <title>YX — Klar for Kunde</title>
@@ -736,6 +736,14 @@ function App(){
           {myRegion&&<span style={{fontSize:11,fontWeight:700,color:D,background:"#fff",border:"1px solid "+D,padding:"3px 10px",borderRadius:6}}>📍 Region {myRegion.name} · {filt.length} stasjoner</span>}
           <span style={{fontSize:13,color:"#666"}}>{isRS?"Coaching-besøk":"Selvevaluering"}</span>
         </div>
+
+        {/* Demo data banner */}
+        {scopedVisits.filter(v=>v.visit_note==="[TESTDATA]").length>0&&(
+          <div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:10,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#1e40af",display:"flex",alignItems:"center",gap:6}}>
+            <span>ℹ️</span>
+            <span><b>Demo-modus:</b> Eksisterende besøk er generert for testing. Dine nye besøk er ekte data.</span>
+          </div>
+        )}
 
         {/* Draft recovery banner */}
         {draft&&(
