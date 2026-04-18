@@ -47,6 +47,7 @@ if('serviceWorker' in navigator){
   @keyframes rec{0%,100%{opacity:1}50%{opacity:.3}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
   .loader{width:24px;height:24px;border:2px solid #E5E5E5;border-top-color:#111;border-radius:50%;animation:spin .6s linear infinite}
   .fadeIn{animation:fadeIn .2s ease-out}
 
@@ -432,6 +433,65 @@ function clearFromQueue(localId){
   }catch(e){}
 }
 
+/* ── App header — sticky with hamburger ── */
+function AppHeader({online,queueCount,syncing,syncQueue,onMenu}){
+  return(
+    <div style={{position:"sticky",top:0,zIndex:20,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",background:C.surface,borderBottom:`1px solid ${C.line}`}}>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <button onClick={onMenu} aria-label="Meny" style={{color:C.ink,padding:4,marginLeft:-4}}>
+          <Icon name="menu" size={22}/>
+        </button>
+        <img src={LC} alt="YX" style={{height:20}}/>
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        {!online&&<span style={{fontSize:11,fontWeight:500,color:C.warn,display:"flex",alignItems:"center",gap:4}}><Icon name="signal" size={14}/> Offline</span>}
+        {queueCount>0&&online&&<button onClick={syncQueue} style={{fontSize:11,fontWeight:500,color:C.red}}>{syncing?"Synker…":`${queueCount} i kø`}</button>}
+      </div>
+    </div>
+  );
+}
+
+/* ── Side menu — drawer from left ── */
+function SideMenu({open,onClose,currentSection,setSection,onLogout,profile}){
+  if(!open)return null;
+  const items=[
+    {id:'kfk',label:'Klar for Kunde',icon:'shield',desc:'Stasjonsbesøk, HMS og tiltak'},
+    {id:'sales',label:'Mine salgstall',icon:'chart',desc:'Utvidet analyse og trender'},
+  ];
+  return(
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:100,animation:"fadeIn .2s"}}/>
+      {/* Drawer */}
+      <div style={{position:"fixed",left:0,top:0,bottom:0,width:"min(320px, 85vw)",background:C.surface,zIndex:101,display:"flex",flexDirection:"column",boxShadow:"2px 0 16px rgba(0,0,0,0.15)",animation:"slideInLeft .22s"}}>
+        <div style={{padding:"22px 24px 18px",borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:18,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Meny</div>
+          <button onClick={onClose} aria-label="Lukk" style={{color:C.muted,padding:6,marginRight:-6}}><Icon name="x" size={20}/></button>
+        </div>
+        <div style={{flex:1,padding:"16px 0",overflowY:"auto"}}>
+          {items.map(it=>{
+            const active=currentSection===it.id;
+            return(
+              <button key={it.id} onClick={()=>{setSection(it.id);onClose();}}
+                style={{width:"100%",padding:"14px 24px",display:"flex",alignItems:"center",gap:14,textAlign:"left",background:active?C.subtle:"transparent",borderLeft:`3px solid ${active?C.red:"transparent"}`}}>
+                <Icon name={it.icon} size={20} color={active?C.red:C.body}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:15,fontWeight:active?600:500,color:active?C.ink:C.body}}>{it.label}</div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>{it.desc}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div style={{borderTop:`1px solid ${C.line}`,padding:"14px 24px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:12,color:C.muted,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{profile?.email||""}</div>
+          <button onClick={()=>{onLogout();onClose();}} style={{fontSize:13,fontWeight:500,color:C.body,padding:"6px 0",flexShrink:0,marginLeft:12}}>Logg ut</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 /* ── Bottom nav — icons, not emoji ── */
 function BottomNav({view,setView,hmsCount,actionCount,plannedCount}){
   const items=[
@@ -527,7 +587,14 @@ function App(){
   const[benchRegion,setBenchRegion]=useState([]);
   const[benchCountry,setBenchCountry]=useState([]);
   const[showPatterns,setShowPatterns]=useState(false);
-  const[visitSort,setVisitSort]=useState("distance"); // distance | oldest | lowestScore | openActions
+  const[visitSort,setVisitSort]=useState("distance");
+  const[menuOpen,setMenuOpen]=useState(false);
+  const[section,setSection]=useState("kfk"); // "kfk" | "sales"
+  const switchSection=(s)=>{
+    setSection(s);
+    if(s==="kfk")setView("home");
+    setStationView(null);
+  };
   const[showPlanModal,setShowPlanModal]=useState(null); // {station} or null
   const[planDate,setPlanDate]=useState("");
   const[planNote,setPlanNote]=useState("");
@@ -1050,6 +1117,159 @@ function App(){
     </div>
   );
 
+  /* ── MINE SALGSTALL — egen seksjon ── */
+  if(section==="sales"){
+    // Demo data
+    const kpis=[
+      {label:"Omsetning MTD",value:"42,8 mill kr",change:"+6,3%",positive:true},
+      {label:"Drivstoffvolum",value:"2,1 mill L",change:"−2,1%",positive:false},
+      {label:"Kunder MTD",value:"285 600",change:"+4,5%",positive:true},
+      {label:"Snitt per kjøp",value:"150 kr",change:"+3,2%",positive:true},
+    ];
+    const trend=[32,28,35,40,38,42,45,48,44,47,50,42]; // 12 months
+    const monthLabels=["M","J","J","A","S","O","N","D","J","F","M","A"];
+    const pieSegments=[
+      {label:"Drivstoff",value:68,color:"#111111"},
+      {label:"Butikk",value:19,color:"#CF122D"},
+      {label:"Mat",value:13,color:"#F5A623"},
+    ];
+    const topStations=[
+      {name:"YX Gråmyra",value:3.2,pct:100},
+      {name:"YX Skulestadmo",value:2.8,pct:87},
+      {name:"YX Håneskrysset",value:2.4,pct:75},
+      {name:"YX Kvaløysletta",value:2.1,pct:65},
+      {name:"YX Bjugn",value:1.9,pct:59},
+    ];
+    const maxTrend=Math.max(...trend);
+    const chartW=320,chartH=120;
+
+    // Pie chart calc
+    const pieR=56,pieCx=70,pieCy=70;
+    let cumAngle=-Math.PI/2;
+    const pieArcs=pieSegments.map(seg=>{
+      const angle=(seg.value/100)*Math.PI*2;
+      const x1=pieCx+pieR*Math.cos(cumAngle);
+      const y1=pieCy+pieR*Math.sin(cumAngle);
+      const x2=pieCx+pieR*Math.cos(cumAngle+angle);
+      const y2=pieCy+pieR*Math.sin(cumAngle+angle);
+      const large=angle>Math.PI?1:0;
+      const path=`M ${pieCx} ${pieCy} L ${x1} ${y1} A ${pieR} ${pieR} 0 ${large} 1 ${x2} ${y2} Z`;
+      cumAngle+=angle;
+      return{...seg,path};
+    });
+
+    return(
+      <div style={{paddingBottom:40,background:C.bg,minHeight:"100vh"}}>
+        <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+        <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
+
+        {/* DEMO banner */}
+        <div style={{margin:"16px 20px 0",padding:"12px 14px",background:C.warnSoft,border:`1px solid ${C.warn}44`,borderRadius:10,display:"flex",alignItems:"center",gap:10}}>
+          <Icon name="bell" size={16} color={C.warn}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.ink}}>Demo / dummy-data</div>
+            <div style={{fontSize:12,color:C.body,marginTop:2}}>Tallene på denne siden er ikke ekte. Under utvikling.</div>
+          </div>
+        </div>
+
+        {/* Greeting */}
+        <div style={{padding:"28px 20px 8px"}}>
+          <div style={{fontSize:28,fontWeight:600,color:C.ink,letterSpacing:-0.5,marginBottom:4}}>Mine salgstall</div>
+          <div style={{fontSize:15,color:C.body}}>
+            {profile?.name?.split(" ")[0]||""} · {isRS&&myRegion?`Region ${myRegion.name}`:"Alle regioner"}
+          </div>
+        </div>
+
+        {/* KPI-blokk */}
+        <div style={{padding:"28px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Nøkkeltall</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {kpis.map((k,i)=>(
+              <div key={i} style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"14px 16px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+                <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>{k.label}</div>
+                <div style={{fontSize:20,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.3}}>{k.value}</div>
+                <div style={{fontSize:12,color:k.positive?C.ok:C.bad,marginTop:4,fontVariantNumeric:"tabular-nums"}}>{k.positive?"▲":"▼"} {k.change}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Trend linjegraf */}
+        <div style={{padding:"32px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Omsetning siste 12 måneder</div>
+          <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"18px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+            <svg viewBox={`0 0 ${chartW} ${chartH+30}`} style={{width:"100%",height:"auto",overflow:"visible"}}>
+              {/* Gridlines */}
+              {[0,0.25,0.5,0.75,1].map((t,i)=>(
+                <line key={i} x1="0" y1={chartH*(1-t)} x2={chartW} y2={chartH*(1-t)} stroke={C.line} strokeWidth="1"/>
+              ))}
+              {/* Line path */}
+              <path d={trend.map((v,i)=>{
+                const x=(i/(trend.length-1))*chartW;
+                const y=chartH-(v/maxTrend)*chartH*0.9;
+                return`${i===0?"M":"L"} ${x} ${y}`;
+              }).join(" ")} fill="none" stroke={C.red} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+              {/* Points */}
+              {trend.map((v,i)=>{
+                const x=(i/(trend.length-1))*chartW;
+                const y=chartH-(v/maxTrend)*chartH*0.9;
+                return<circle key={i} cx={x} cy={y} r="3" fill={C.red}/>;
+              })}
+              {/* Month labels */}
+              {monthLabels.map((m,i)=>{
+                const x=(i/(monthLabels.length-1))*chartW;
+                return<text key={i} x={x} y={chartH+18} fontSize="10" fill={C.muted} textAnchor="middle">{m}</text>;
+              })}
+            </svg>
+          </div>
+        </div>
+
+        {/* Pie chart — fordeling */}
+        <div style={{padding:"32px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Omsetningsfordeling</div>
+          <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"18px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)",display:"flex",alignItems:"center",gap:24}}>
+            <svg width="140" height="140" viewBox="0 0 140 140" style={{flexShrink:0}}>
+              {pieArcs.map((a,i)=>(
+                <path key={i} d={a.path} fill={a.color}/>
+              ))}
+            </svg>
+            <div style={{flex:1}}>
+              {pieSegments.map((s,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0"}}>
+                  <div style={{width:12,height:12,background:s.color,borderRadius:3}}/>
+                  <div style={{flex:1,fontSize:14,color:C.body}}>{s.label}</div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{s.value}%</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Top 5 stasjoner */}
+        <div style={{padding:"32px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Topp 5 stasjoner i regionen</div>
+          <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"16px 18px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+            {topStations.map((s,i)=>(
+              <div key={i} style={{padding:"10px 0",borderTop:i?`1px solid ${C.line}`:"none"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+                  <div style={{fontSize:14,fontWeight:500,color:C.ink}}>{s.name}</div>
+                  <div style={{fontSize:14,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.3}}>{s.value} mill kr</div>
+                </div>
+                <div style={{height:4,background:C.line,borderRadius:2,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:s.pct+"%",background:C.red,borderRadius:2}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{padding:"40px 20px 20px",textAlign:"center",color:C.faint,fontSize:11}}>
+          Mine salgstall · demo
+        </div>
+      </div>
+    );
+  }
+
   /* ── HOME ── */
   if(view==="home"){
     const regionStationIds=isRS&&profile?.region_id?new Set(stations.filter(s=>s.region_id===profile.region_id).map(s=>s.id)):null;
@@ -1086,14 +1306,8 @@ function App(){
 
     return(
     <div style={{paddingBottom:100,background:C.bg,minHeight:"100vh"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",background:C.surface,borderBottom:`1px solid ${C.line}`}}>
-        <img src={LC} alt="YX" style={{height:20}}/>
-        <div style={{display:"flex",alignItems:"center",gap:14}}>
-          {!online&&<span style={{fontSize:11,fontWeight:500,color:C.warn,display:"flex",alignItems:"center",gap:4}}><Icon name="signal" size={14}/> Offline</span>}
-          {queueCount>0&&online&&<button onClick={syncQueue} style={{fontSize:11,fontWeight:500,color:C.red}}>{syncing?"Synker…":`${queueCount} i kø`}</button>}
-          <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
-        </div>
-      </div>
+      <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+      <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
 
       {/* Greeting */}
       <div style={{padding:"32px 20px 8px"}}>
@@ -1477,10 +1691,8 @@ function App(){
 
     return(
     <div style={{paddingBottom:100,background:C.surface,minHeight:"100vh"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.line}`}}>
-        <img src={LC} alt="YX" style={{height:20}}/>
-        <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
-      </div>
+      <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+      <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
 
       <div style={{padding:"28px 20px 16px"}}>
         <div style={{fontSize:12,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Besøk</div>
@@ -2099,8 +2311,11 @@ function App(){
           <button onClick={()=>{setStationView(null);setView("home");}} style={{color:C.body,fontSize:15,fontWeight:500,display:"flex",alignItems:"center",gap:6,padding:"6px 0",minHeight:36}}>
             <Icon name="arrowLeft" size={18}/> Tilbake
           </button>
-          <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
+          <button onClick={()=>setMenuOpen(true)} aria-label="Meny" style={{color:C.ink,padding:4}}>
+            <Icon name="menu" size={22}/>
+          </button>
         </div>
+        <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
 
         {/* Station header */}
         <div style={{background:C.surface,padding:"24px 20px 20px",borderBottom:`1px solid ${C.line}`}}>
@@ -2519,10 +2734,8 @@ function App(){
 
     return(
       <div style={{paddingBottom:100,background:C.bg,minHeight:"100vh"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.line}`,background:C.surface}}>
-          <img src={LC} alt="YX" style={{height:20}}/>
-          <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
-        </div>
+        <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+        <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
 
         {/* Tabs */}
         <div style={{display:"flex",gap:2,padding:"20px 20px 0",borderBottom:`1px solid ${C.line}`,background:C.bg,position:"sticky",top:0,zIndex:10}}>
@@ -2775,10 +2988,8 @@ function App(){
 
     return(
       <div style={{paddingBottom:100,background:C.bg,minHeight:"100vh"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.line}`,background:C.surface}}>
-          <img src={LC} alt="YX" style={{height:20}}/>
-          <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
-        </div>
+        <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+        <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
 
         <div style={{padding:"28px 20px 16px"}}>
           <div style={{fontSize:12,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Alle tiltak</div>
@@ -2859,11 +3070,8 @@ function App(){
 
     return(
       <div style={{paddingBottom:100,background:C.bg,minHeight:"100vh"}}>
-        {/* Header */}
-        <div style={{background:C.surface,borderBottom:`1px solid ${C.line}`,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <img src={LC} alt="YX" style={{height:20}}/>
-          <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
-        </div>
+        <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+        <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
 
         {/* Page header */}
         <div style={{padding:"28px 20px 24px",background:C.surface,borderBottom:`1px solid ${C.line}`}}>
