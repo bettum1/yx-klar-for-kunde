@@ -2177,7 +2177,7 @@ function App(){
             if(!snap||snap.d30_kunder<1)return null;
             const bcRow=benchCountry.find(b=>b.station_type===sv.type);
             const brRow=benchRegion.find(b=>b.station_type===sv.type&&b.region_id===sv.region_id);
-            const fmt=(n,d=0)=>n==null?"—":Math.round(n).toLocaleString("nb-NO");
+            const fmt=n=>n==null?"—":Math.round(n).toLocaleString("nb-NO");
             const pct=(cur,prev)=>{
               if(!prev||prev===0)return null;
               return Math.round((cur/prev-1)*100);
@@ -2188,11 +2188,24 @@ function App(){
             const d30=snap.d30_days||30;
             const ly=snap.ly30_days||30;
 
+            // Build rows with: current value, station %chg vs LY, region %chg vs LY, country %chg vs LY
             const rows=[
-              {label:"Kunder / dag",cur:snap.d30_kunder/d30,lyVal:snap.ly30_kunder/ly,reg:brRow?.kunder_per_day,land:bcRow?.kunder_per_day,unit:""},
-              {label:"Butikk / dag",cur:snap.d30_butikk/d30,lyVal:snap.ly30_butikk/ly,reg:brRow?.butikk_per_day,land:bcRow?.butikk_per_day,unit:"kr",hide:sv.type==="automat"},
-              {label:"Mat / dag",cur:snap.d30_mat/d30,lyVal:snap.ly30_mat/ly,reg:brRow?.mat_per_day,land:bcRow?.mat_per_day,unit:"kr",hide:sv.type==="automat"},
-              {label:"Volum / dag",cur:snap.d30_volum/d30,lyVal:snap.ly30_volum/ly,reg:brRow?.volum_per_day,land:bcRow?.volum_per_day,unit:"L"},
+              {label:"Kunder / dag",
+                cur:snap.d30_kunder/d30,lyVal:snap.ly30_kunder/ly,
+                regCur:brRow?.kunder_per_day,regLy:brRow?.kunder_per_day_ly,
+                landCur:bcRow?.kunder_per_day,landLy:bcRow?.kunder_per_day_ly,unit:""},
+              {label:"Butikk / dag",
+                cur:snap.d30_butikk/d30,lyVal:snap.ly30_butikk/ly,
+                regCur:brRow?.butikk_per_day,regLy:brRow?.butikk_per_day_ly,
+                landCur:bcRow?.butikk_per_day,landLy:bcRow?.butikk_per_day_ly,unit:"kr",hide:sv.type==="automat"},
+              {label:"Mat / dag",
+                cur:snap.d30_mat/d30,lyVal:snap.ly30_mat/ly,
+                regCur:brRow?.mat_per_day,regLy:brRow?.mat_per_day_ly,
+                landCur:bcRow?.mat_per_day,landLy:bcRow?.mat_per_day_ly,unit:"kr",hide:sv.type==="automat"},
+              {label:"Volum / dag",
+                cur:snap.d30_volum/d30,lyVal:snap.ly30_volum/ly,
+                regCur:brRow?.volum_per_day,regLy:brRow?.volum_per_day_ly,
+                landCur:bcRow?.volum_per_day,landLy:bcRow?.volum_per_day_ly,unit:"L"},
             ].filter(r=>!r.hide);
 
             return(
@@ -2202,7 +2215,7 @@ function App(){
                   <div style={{fontSize:11,color:C.muted}}>Siste 30 dager · snitt</div>
                 </div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.5}}>
-                  Sammenlignet med samme periode i fjor, og mot snitt for {sv.type==="automat"?"automater":"fullservice-stasjoner"} i {regions.find(r=>r.id===sv.region_id)?.name||"regionen"} og hele YX.
+                  Endring mot samme periode i fjor. Sammenlignet med {sv.type==="automat"?"automater":"fullservice-stasjoner"} i {regions.find(r=>r.id===sv.region_id)?.name||"regionen"} og hele YX.
                 </div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -2210,32 +2223,29 @@ function App(){
                       <tr style={{color:C.muted,fontSize:11,textTransform:"uppercase",letterSpacing:0.4}}>
                         <th style={{textAlign:"left",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}></th>
                         <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Stasjon</th>
-                        <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>vs fjor</th>
                         <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Region</th>
                         <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Land</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((r,i)=>{
-                        const p=pct(r.cur,r.lyVal);
-                        const regPct=pct(r.cur,r.reg);
-                        const landPct=pct(r.cur,r.land);
+                        const stPct=pct(r.cur,r.lyVal);
+                        const regPct=pct(r.regCur,r.regLy);
+                        const landPct=pct(r.landCur,r.landLy);
                         return(
                           <tr key={i} style={{borderBottom:i<rows.length-1?`1px solid ${C.line}`:"none"}}>
-                            <td style={{padding:"10px 4px",color:C.body}}>{r.label}</td>
-                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",fontWeight:600,color:C.ink}}>
-                              {fmt(r.cur)}{r.unit?` ${r.unit}`:""}
+                            <td style={{padding:"10px 4px",color:C.body,verticalAlign:"top"}}>{r.label}</td>
+                            <td style={{padding:"10px 4px",textAlign:"right",verticalAlign:"top"}}>
+                              <div style={{fontSize:14,fontVariantNumeric:"tabular-nums",fontWeight:600,color:C.ink}}>{fmt(r.cur)}{r.unit?` ${r.unit}`:""}</div>
+                              {stPct!=null&&<div style={{fontSize:12,color:pctCol(stPct),fontVariantNumeric:"tabular-nums",marginTop:2}}>{arrow(stPct)} {(stPct>0?"+":"")+stPct+"%"}</div>}
                             </td>
-                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",color:pctCol(p),fontSize:12}}>
-                              {p==null?"—":(p>0?"+":"")+p+"%"}
+                            <td style={{padding:"10px 4px",textAlign:"right",verticalAlign:"top"}}>
+                              <div style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:C.body}}>{fmt(r.regCur)}</div>
+                              {regPct!=null&&<div style={{fontSize:12,color:pctCol(regPct),fontVariantNumeric:"tabular-nums",marginTop:2}}>{arrow(regPct)} {(regPct>0?"+":"")+regPct+"%"}</div>}
                             </td>
-                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",color:C.muted,fontSize:12}}>
-                              <div style={{color:C.body,fontWeight:500}}>{fmt(r.reg)}</div>
-                              {regPct!=null&&<div style={{color:pctCol(regPct),fontSize:11,marginTop:1}}>{arrow(regPct)} {(regPct>0?"+":"")+regPct+"%"}</div>}
-                            </td>
-                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",color:C.muted,fontSize:12}}>
-                              <div style={{color:C.body,fontWeight:500}}>{fmt(r.land)}</div>
-                              {landPct!=null&&<div style={{color:pctCol(landPct),fontSize:11,marginTop:1}}>{arrow(landPct)} {(landPct>0?"+":"")+landPct+"%"}</div>}
+                            <td style={{padding:"10px 4px",textAlign:"right",verticalAlign:"top"}}>
+                              <div style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:C.body}}>{fmt(r.landCur)}</div>
+                              {landPct!=null&&<div style={{fontSize:12,color:pctCol(landPct),fontVariantNumeric:"tabular-nums",marginTop:2}}>{arrow(landPct)} {(landPct>0?"+":"")+landPct+"%"}</div>}
                             </td>
                           </tr>
                         );
@@ -2244,7 +2254,7 @@ function App(){
                   </table>
                 </div>
                 <div style={{fontSize:11,color:C.muted,marginTop:12,lineHeight:1.4}}>
-                  Tall hentes fra Qlik hver natt. Benchmarks er snitt per dag per stasjon av samme type.
+                  Prosentendring er mot samme 30-dagers periode i fjor. Region- og landstall er median for stasjoner av samme type.
                 </div>
               </div>
             );
