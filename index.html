@@ -1082,8 +1082,8 @@ function App(){
     const avgRecent=recentVisits.length?Math.round(recentVisits.reduce((s,v)=>s+v.pct,0)/recentVisits.length):null;
 
     return(
-    <div style={{paddingBottom:100,background:C.surface,minHeight:"100vh"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.line}`}}>
+    <div style={{paddingBottom:100,background:C.bg,minHeight:"100vh"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",background:C.surface,borderBottom:`1px solid ${C.line}`}}>
         <img src={LC} alt="YX" style={{height:20}}/>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           {!online&&<span style={{fontSize:11,fontWeight:500,color:C.warn,display:"flex",alignItems:"center",gap:4}}><Icon name="signal" size={14}/> Offline</span>}
@@ -1114,10 +1114,29 @@ function App(){
         </div>
       )}
 
-      {/* Denne måneden — handlingsdrivende KPIer */}
+      {/* ────── NØKKELTALL ────── */}
       {(isRS||isLeder)&&(
         <div style={{padding:"28px 20px 0"}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Denne måneden</div>
+          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Nøkkeltall</div>
+          <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"18px 20px",display:"flex",gap:32}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Besøk i måneden</div>
+              <div style={{fontSize:28,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>{visitsThisMonth}</div>
+            </div>
+            {avgRecent!==null&&(
+              <div>
+                <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Snitt siste 30d</div>
+                <div style={{fontSize:28,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>{avgRecent}%</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ────── DET JEG MÅ GJØRE ────── */}
+      {(isRS||isLeder)&&(
+        <div style={{padding:"28px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Det jeg må gjøre</div>
           <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
 
             {notVisitedRecently>0&&(
@@ -1155,20 +1174,6 @@ function App(){
 
             {notVisitedRecently===0&&actionsDueSoon===0&&pendingOperCount===0&&(
               <div style={{background:C.surface,padding:"20px 16px",color:C.muted,fontSize:14,textAlign:"center"}}>Ingenting som krever handling</div>
-            )}
-          </div>
-
-          {/* Number summary */}
-          <div style={{display:"flex",gap:24,marginTop:24}}>
-            <div>
-              <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Besøk i måneden</div>
-              <div style={{fontSize:24,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>{visitsThisMonth}</div>
-            </div>
-            {avgRecent!==null&&(
-              <div>
-                <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Snitt siste 30d</div>
-                <div style={{fontSize:24,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>{avgRecent}%</div>
-              </div>
             )}
           </div>
 
@@ -1273,34 +1278,61 @@ function App(){
         </div>
       )}
 
-      {/* Planlagte besøk */}
-      {upcomingMine.length>0&&(
+      {/* ────── MINE BESØK ────── (planlagt + nylig besøkt samlet) */}
+      {(upcomingMine.length>0||myV.length>0)&&(
         <div style={{padding:"28px 20px 0"}}>
           <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Planlagte besøk</div>
+            <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Mine besøk</div>
             <button onClick={()=>setView("visits")} style={{fontSize:13,color:C.body,fontWeight:500}}>Se alle</button>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
-            {upcomingMine.slice(0,3).map(pv=>{
-              const st=stations.find(s=>s.id===pv.station_id);
-              if(!st)return null;
-              const days=Math.ceil((new Date(pv.planned_date)-new Date(today))/86400000);
-              const dayLabel=days===0?"I dag":days===1?"I morgen":`Om ${days} dager`;
-              return(
-                <button key={pv.id} onClick={()=>{setStationView(st);setView("stationDetail");}} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
-                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{dayLabel} · {new Date(pv.planned_date).toLocaleDateString("nb-NO",{weekday:"long",day:"numeric",month:"short"})}</div>
-                  </div>
-                  <Icon name="chevronRight" size={16} color={C.muted}/>
-                </button>
-              );
-            })}
-          </div>
+
+          {upcomingMine.length>0&&(
+            <div style={{marginBottom:myV.length>0?16:0}}>
+              <div style={{fontSize:11,fontWeight:500,color:C.muted,letterSpacing:0.3,marginBottom:8}}>Planlagt</div>
+              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+                {upcomingMine.slice(0,3).map(pv=>{
+                  const st=stations.find(s=>s.id===pv.station_id);
+                  if(!st)return null;
+                  const days=Math.ceil((new Date(pv.planned_date)-new Date(today))/86400000);
+                  const dayLabel=days===0?"I dag":days===1?"I morgen":`Om ${days} dager`;
+                  return(
+                    <button key={pv.id} onClick={()=>{setStationView(st);setView("stationDetail");}} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
+                        <div style={{fontSize:12,color:C.muted,marginTop:2}}>{dayLabel} · {new Date(pv.planned_date).toLocaleDateString("nb-NO",{weekday:"long",day:"numeric",month:"short"})}</div>
+                      </div>
+                      <Icon name="chevronRight" size={16} color={C.muted}/>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {myV.length>0&&(
+            <div>
+              <div style={{fontSize:11,fontWeight:500,color:C.muted,letterSpacing:0.3,marginBottom:8}}>Nylig besøkt</div>
+              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+                {myV.slice(0,3).map(v=>{
+                  const sn=stations.find(s=>s.id===v.station_id);
+                  if(!sn)return null;
+                  return(
+                    <button key={v.id} onClick={()=>{setStationView(sn);setView("stationDetail");}} style={{background:C.surface,padding:"14px 16px",textAlign:"left",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sn.name}</div>
+                        <div style={{fontSize:12,color:C.muted,marginTop:2}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})} · {v.pct}%</div>
+                      </div>
+                      <Icon name="chevronRight" size={18} color={C.muted}/>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* Salgssammendrag — regions- eller stasjonsnivå */}
+      {/* ────── REGIONEN I TALL ────── */}
       {(()=>{
         if(salesSnapshot.length===0)return null;
         const fmt=n=>n==null?"—":Math.round(n).toLocaleString("nb-NO");
@@ -1427,30 +1459,8 @@ function App(){
         );
       })()}
 
-      {/* Nylig besøkt */}
-      {myV.length>0&&(
-        <div style={{padding:"28px 20px 0"}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Nylig besøkt</div>
-          <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
-            {myV.slice(0,3).map(v=>{
-              const sn=stations.find(s=>s.id===v.station_id);
-              if(!sn)return null;
-              return(
-                <button key={v.id} onClick={()=>{setStationView(sn);setView("stationDetail");}} style={{background:C.surface,padding:"14px 16px",textAlign:"left",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sn.name}</div>
-                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{new Date(v.created_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})} · {v.pct}%</div>
-                  </div>
-                  <Icon name="chevronRight" size={18} color={C.muted}/>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <div style={{padding:"40px 20px 20px",textAlign:"center",color:C.faint,fontSize:11}}>
-        v27 · {online?"Online":"Offline"}
+        v35 · {online?"Online":"Offline"}
       </div>
 
       <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
