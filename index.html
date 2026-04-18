@@ -527,6 +527,7 @@ function App(){
   const[benchRegion,setBenchRegion]=useState([]);
   const[benchCountry,setBenchCountry]=useState([]);
   const[showPatterns,setShowPatterns]=useState(false);
+  const[visitSort,setVisitSort]=useState("distance"); // distance | oldest | lowestScore | openActions
   const[showPlanModal,setShowPlanModal]=useState(null); // {station} or null
   const[planDate,setPlanDate]=useState("");
   const[planNote,setPlanNote]=useState("");
@@ -1522,42 +1523,127 @@ function App(){
             style={{width:"100%",padding:"11px 38px 11px 40px",borderRadius:10,background:C.subtle,border:`1px solid transparent`,fontSize:15,color:C.ink}}/>
           {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",padding:6,color:C.muted}}><Icon name="x" size={16}/></button>}
         </div>
-        <div style={{fontSize:12,color:C.muted,marginBottom:12}}>{filt.length} {search?"treff":"stasjoner"}{loc&&!search?" · sortert etter avstand":""}</div>
+
+        {/* Sorteringsvalg — kun for RS/Leder */}
+        {(isRS||isLeder)&&!search&&(
+          <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:12,paddingBottom:4,msOverflowStyle:"none",scrollbarWidth:"none"}}>
+            {[
+              {id:"distance",label:"Avstand",disabled:!loc},
+              {id:"oldest",label:"Eldst besøkt"},
+              {id:"lowestScore",label:"Lavest score"},
+              {id:"openActions",label:"Åpne tiltak"},
+            ].filter(o=>!o.disabled).map(o=>(
+              <button key={o.id} onClick={()=>setVisitSort(o.id)}
+                style={{padding:"7px 12px",borderRadius:8,fontSize:13,fontWeight:500,whiteSpace:"nowrap",flexShrink:0,
+                  background:visitSort===o.id?C.ink:C.surface,
+                  color:visitSort===o.id?"#fff":C.body,
+                  border:`1px solid ${visitSort===o.id?C.ink:C.line}`}}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{fontSize:12,color:C.muted,marginBottom:12}}>{filt.length} {search?"treff":"stasjoner"}{loc&&!search&&visitSort==="distance"?" · sortert etter avstand":""}</div>
       </div>
 
-      {stLoad?<div style={{textAlign:"center",padding:40}}><div className="loader" style={{margin:"0 auto"}}/></div>:(
-        <div style={{padding:"0 20px",display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",margin:"0 20px"}}>
-          {filt.slice(0,showAll?filt.length:20).map(s=>{
-            const lv=visits.find(v=>v.station_id===s.id);
-            const d=loc&&s.lat?dist(s):null;
-            const distTxt=d?(d<1?`${Math.round(d*1000)} m`:`${d.toFixed(1)} km`):null;
-            const isPlanned=plannedVisits.find(pv=>pv.station_id===s.id&&pv.planned_by===user?.id&&pv.status==='planned');
-            return(
-              <button key={s.id} onClick={()=>{if(isRS||isLeder){setStationView(s);setView("stationDetail");}else{setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);setStation(s);setView("audit");}setShowAll(false);}}
-                style={{background:C.surface,padding:"14px 16px",textAlign:"left",display:"flex",alignItems:"center",gap:12}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
-                    {s.name}
-                    {isPlanned&&<Icon name="clock" size={12} color={C.muted}/>}
+      {stLoad?<div style={{textAlign:"center",padding:40}}><div className="loader" style={{margin:"0 auto"}}/></div>:(()=>{
+        // Build enriched list with sort
+        const now=new Date();
+        const enriched=filt.map(s=>{
+          const stVisits=visits.filter(v=>v.station_id===s.id);
+          const lastVisit=stVisits.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+          const prevVisit=stVisits.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[1];
+          const daysSinceVisit=lastVisit?Math.floor((now-new Date(lastVisit.created_at))/86400000):null;
+          const scoreTrend=lastVisit&&prevVisit?(lastVisit.pct-prevVisit.pct):null;
+          const openA=actions.filter(a=>a.station_id===s.id&&(a.status==="open"||a.status==="in_progress")).length;
+          return{...s,_lastVisit:lastVisit,_daysSince:daysSinceVisit,_scoreTrend:scoreTrend,_openActions:openA};
+        });
+
+        // Apply sort (only for RS/Leder; SL has 1 station)
+        if((isRS||isLeder)&&!search){
+          if(visitSort==="oldest"){
+            enriched.sort((a,b)=>{
+              const da=a._daysSince==null?99999:a._daysSince;
+              const db=b._daysSince==null?99999:b._daysSince;
+              return db-da;
+            });
+          }else if(visitSort==="lowestScore"){
+            enriched.sort((a,b)=>{
+              const sa=a._lastVisit?a._lastVisit.pct:999;
+              const sb=b._lastVisit?b._lastVisit.pct:999;
+              return sa-sb;
+            });
+          }else if(visitSort==="openActions"){
+            enriched.sort((a,b)=>b._openActions-a._openActions);
+          }
+          // else: distance — already sorted above
+        }
+
+        const shown=enriched.slice(0,showAll?enriched.length:20);
+
+        return(
+          <div style={{padding:"0 20px",display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",margin:"0 20px"}}>
+            {shown.map(s=>{
+              const d=loc&&s.lat?dist(s):null;
+              const distTxt=d?(d<1?`${Math.round(d*1000)} m`:`${d.toFixed(1)} km`):null;
+              const isPlanned=plannedVisits.find(pv=>pv.station_id===s.id&&pv.planned_by===user?.id&&pv.status==='planned');
+              const score=s._lastVisit?.pct;
+              const scoreCol=score==null?C.muted:score>=80?C.ok:score>=60?C.warn:C.bad;
+              const trend=s._scoreTrend;
+
+              // Secondary line: days since visit + open actions
+              const secondLine=[];
+              if(s._daysSince!=null){
+                if(s._daysSince===0)secondLine.push("Besøkt i dag");
+                else if(s._daysSince===1)secondLine.push("Besøkt i går");
+                else if(s._daysSince<30)secondLine.push(`Besøkt ${s._daysSince} dager siden`);
+                else if(s._daysSince<60)secondLine.push(`Besøkt for ${s._daysSince} dager siden`);
+                else secondLine.push(`Ikke besøkt på ${s._daysSince} dager`);
+              }else if(isRS||isLeder){
+                secondLine.push("Aldri besøkt");
+              }
+              if(s._openActions>0)secondLine.push(`${s._openActions} åpne tiltak`);
+
+              return(
+                <button key={s.id} onClick={()=>{if(isRS||isLeder){setStationView(s);setView("stationDetail");}else{setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);setStation(s);setView("audit");}setShowAll(false);}}
+                  style={{background:C.surface,padding:"14px 16px",textAlign:"left",display:"flex",alignItems:"flex-start",gap:12}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+                      {s.name}
+                      {isPlanned&&<Icon name="clock" size={12} color={C.muted}/>}
+                    </div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>
+                      <span>{s.poststed}</span>
+                      {s.type==="automat"&&<span> · Automat</span>}
+                      {distTxt&&<span> · {distTxt}</span>}
+                    </div>
+                    {(isRS||isLeder)&&secondLine.length>0&&(
+                      <div style={{fontSize:12,color:s._openActions>0?C.body:C.muted,marginTop:4,display:"flex",alignItems:"center",gap:6}}>
+                        {secondLine.map((txt,i)=>(<React.Fragment key={i}>{i>0&&<span style={{color:C.faint}}>·</span>}<span>{txt}</span></React.Fragment>))}
+                      </div>
+                    )}
                   </div>
-                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>
-                    <span>{s.poststed}</span>
-                    {s.type==="automat"&&<span> · Automat</span>}
-                    {distTxt&&<span> · {distTxt}</span>}
-                  </div>
-                </div>
-                {lv&&<span style={{fontSize:13,fontWeight:500,color:C.body,fontVariantNumeric:"tabular-nums"}}>{lv.pct}%</span>}
-                <Icon name="chevronRight" size={16} color={C.muted}/>
+                  {score!=null&&(
+                    <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                      <span style={{fontSize:14,fontWeight:600,color:scoreCol,fontVariantNumeric:"tabular-nums"}}>{score}%</span>
+                      {trend!=null&&Math.abs(trend)>=3&&(
+                        <span style={{fontSize:11,color:trend>0?C.ok:C.bad,fontWeight:500}}>{trend>0?"▲":"▼"}</span>
+                      )}
+                    </div>
+                  )}
+                  <Icon name="chevronRight" size={16} color={C.muted}/>
+                </button>
+              );
+            })}
+            {!showAll&&enriched.length>20&&(
+              <button onClick={()=>setShowAll(true)} style={{background:C.surface,padding:"14px 16px",textAlign:"center",color:C.body,fontSize:14,fontWeight:500}}>
+                Se alle {enriched.length} stasjoner
               </button>
-            );
-          })}
-          {!showAll&&filt.length>20&&(
-            <button onClick={()=>setShowAll(true)} style={{background:C.surface,padding:"14px 16px",textAlign:"center",color:C.body,fontSize:14,fontWeight:500}}>
-              Se alle {filt.length} stasjoner
-            </button>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
 
       <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
     </div>
