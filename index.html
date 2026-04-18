@@ -2524,11 +2524,6 @@ function App(){
           <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
         </div>
 
-        <div style={{padding:"28px 20px 0"}}>
-          <div style={{fontSize:12,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>HMS</div>
-          <div style={{fontSize:24,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Helse, miljø og sikkerhet</div>
-        </div>
-
         {/* Tabs */}
         <div style={{display:"flex",gap:2,padding:"20px 20px 0",borderBottom:`1px solid ${C.line}`,background:C.bg,position:"sticky",top:0,zIndex:10}}>
           {[['arshjul','Årshjul'],['operativt','Operativt',pendingOperCount]].map(([key,label,count])=>(
@@ -2541,11 +2536,10 @@ function App(){
 
         {/* ── ÅRSHJUL ── */}
         {hmsTab==='arshjul'&&<>
-        <div style={{padding:"24px 20px 16px"}}>
-          <div style={{fontSize:16,fontWeight:600,color:C.ink,marginBottom:4}}>{tertialInfo[curTertial].name}</div>
-          <div style={{fontSize:13,color:C.body}}>{tertialInfo[curTertial].period} · lukkes {tertialInfo[curTertial].endDate}</div>
-
-          <div style={{marginTop:20}}>
+        <div style={{padding:"36px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>{tertialInfo[curTertial].name}</div>
+          <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"18px 20px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+            <div style={{fontSize:13,color:C.body,marginBottom:16}}>{tertialInfo[curTertial].period} · lukkes {tertialInfo[curTertial].endDate}</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
               <span style={{fontSize:13,color:C.body}}>Fullført av stasjoner</span>
               <span style={{fontSize:14,fontWeight:500,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{completedStations}/{stationsToShow.length}</span>
@@ -2561,12 +2555,12 @@ function App(){
           const items=HMS_DATA[curTertial].items;
           const doneCount=items.filter(it=>hmsChecks.find(c=>c.station_id===profile.station_id&&c.item_id===it.id&&c.tertial===curTertial&&c.checked)).length;
           return(
-            <div style={{padding:"24px 20px 0"}}>
-              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-                <div style={{fontSize:15,fontWeight:600,color:C.ink}}>Tertialpunkter</div>
+            <div style={{padding:"36px 20px 0"}}>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6}}>Tertialpunkter</div>
                 <div style={{fontSize:13,color:C.muted,fontVariantNumeric:"tabular-nums"}}>{doneCount}/{items.length}</div>
               </div>
-              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
                 {items.map(item=>{
                   const check=hmsChecks.find(c=>c.station_id===profile.station_id&&c.item_id===item.id&&c.tertial===curTertial);
                   const done=check?.checked;
@@ -2589,12 +2583,12 @@ function App(){
 
         {/* For RS/leder — stasjonsliste etter status */}
         {hmsTab==='arshjul'&&(isRS||isLeder)&&(
-          <div style={{padding:"24px 20px 0"}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Stasjoner etter status</div>
+          <div style={{padding:"36px 20px 0"}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Stasjoner etter status</div>
             {stationStatus.length===0?
               <div style={{textAlign:"center",padding:"40px 20px",color:C.muted,fontSize:14}}>Ingen stasjoner</div>
               :
-              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
                 {stationStatus.map(s=>{
                   const statusColor=s.pct===100?C.ok:s.pct>=60?C.warn:C.bad;
                   return(
@@ -2683,12 +2677,17 @@ function App(){
                                 if(!st)return null;
                                 const ack=getOpAck(op.id,sid);
                                 return(
-                                  <div key={sid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0"}}>
-                                    <div style={{fontSize:14,color:C.body,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
-                                    {ack?<span style={{fontSize:12,color:C.ok,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
-                                      <Icon name="check" size={14} color={C.ok}/> {new Date(ack.acknowledged_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}
-                                    </span>:
-                                      <button onClick={()=>ackOperative(op.id,sid,null,null)} style={{fontSize:13,fontWeight:500,color:"#fff",background:C.ink,padding:"7px 14px",borderRadius:8,minHeight:32}}>Kvitter ut</button>}
+                                  <div key={sid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",gap:10}}>
+                                    <div style={{flex:1,minWidth:0}}>
+                                      <div style={{fontSize:14,color:C.body,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
+                                      <div style={{fontSize:12,marginTop:2,color:ack?C.ok:C.muted}}>
+                                        {ack?`Kvittert ${new Date(ack.acknowledged_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short",year:"numeric"})}`:"Ikke kvittert"}
+                                      </div>
+                                    </div>
+                                    {ack?
+                                      <Icon name="check" size={18} color={C.ok}/>
+                                    :
+                                      <button onClick={()=>ackOperative(op.id,sid,null,null)} style={{fontSize:13,fontWeight:500,color:"#fff",background:C.ink,padding:"7px 14px",borderRadius:8,minHeight:32,flexShrink:0}}>Kvitter ut</button>}
                                   </div>
                                 );
                               })}
