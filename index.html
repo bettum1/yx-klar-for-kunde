@@ -1200,6 +1200,132 @@ function App(){
         </div>
       )}
 
+      {/* Salgssammendrag — regions- eller stasjonsnivå */}
+      {(()=>{
+        if(salesSnapshot.length===0)return null;
+        const fmt=n=>n==null?"—":Math.round(n).toLocaleString("nb-NO");
+        const pct=(cur,prev)=>!prev||prev===0?null:Math.round((cur/prev-1)*100);
+        const arrow=p=>p==null?"":p>0?"▲":p<0?"▼":"—";
+        const pctCol=p=>p==null?C.muted:p>0?C.ok:p<-5?C.bad:C.body;
+
+        // SL — vis egen stasjon
+        if(profile?.role==="sl"&&profile?.station_id){
+          const snap=salesSnapshot.find(s=>s.station_id===profile.station_id);
+          if(!snap||snap.d30_kunder<1)return null;
+          const st=stations.find(s=>s.id===profile.station_id);
+          const isAuto=st?.type==="automat";
+          const d30=snap.d30_days||30, ly=snap.ly30_days||30;
+
+          const rows=[
+            {label:"Kunder / dag",cur:snap.d30_kunder/d30,ly:snap.ly30_kunder/ly,unit:""},
+            {label:"Butikk / dag",cur:snap.d30_butikk/d30,ly:snap.ly30_butikk/ly,unit:"kr",hide:isAuto},
+            {label:"Mat / dag",cur:snap.d30_mat/d30,ly:snap.ly30_mat/ly,unit:"kr",hide:isAuto},
+            {label:"Volum / dag",cur:snap.d30_volum/d30,ly:snap.ly30_volum/ly,unit:"L"},
+          ].filter(r=>!r.hide);
+
+          return(
+            <div style={{padding:"28px 20px 0"}}>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Dine tall</div>
+                <div style={{fontSize:11,color:C.muted}}>Siste 30 dager</div>
+              </div>
+              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"14px 16px"}}>
+                {rows.map((r,i)=>{
+                  const p=pct(r.cur,r.ly);
+                  return(
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"10px 0",borderTop:i?`1px solid ${C.line}`:"none"}}>
+                      <div style={{fontSize:14,color:C.body}}>{r.label}</div>
+                      <div style={{display:"flex",alignItems:"baseline",gap:12}}>
+                        <div style={{fontSize:17,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.3}}>{fmt(r.cur)}{r.unit?` ${r.unit}`:""}</div>
+                        {p!=null&&<div style={{fontSize:12,color:pctCol(p),fontVariantNumeric:"tabular-nums",minWidth:60,textAlign:"right"}}>{arrow(p)} {(p>0?"+":"")+p+"%"}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div style={{fontSize:11,color:C.muted,marginTop:10,paddingTop:10,borderTop:`1px solid ${C.line}`}}>Sammenlignet med samme periode i fjor</div>
+              </div>
+            </div>
+          );
+        }
+
+        // RS / Leder — regionssammendrag
+        if(!(isRS||isLeder))return null;
+
+        // Filter to stations in user's region (or all for Leder/admin)
+        const myStations=isRS&&profile?.region_id
+          ? stations.filter(s=>s.region_id===profile.region_id)
+          : stations;
+        const myIds=new Set(myStations.map(s=>s.id));
+        const mySnaps=salesSnapshot.filter(s=>myIds.has(s.station_id));
+        if(mySnaps.length===0)return null;
+
+        // Split by type
+        const fullSnaps=mySnaps.filter(s=>s.station_type==="fullservice");
+        const autoSnaps=mySnaps.filter(s=>s.station_type==="automat");
+
+        const region=profile?.region_id?regions.find(r=>r.id===profile.region_id):null;
+        const regionName=region?.name||"hele kjeden";
+
+        const computeAvg=(snaps,key,days)=>{
+          if(snaps.length===0)return null;
+          const sum=snaps.reduce((a,s)=>a+(s[key]||0),0);
+          return sum/snaps.length/days;
+        };
+
+        const typeBlock=(label,snaps,showButikkMat)=>{
+          if(snaps.length===0)return null;
+          const curK=computeAvg(snaps,"d30_kunder",30);
+          const lyK=computeAvg(snaps,"ly30_kunder",30);
+          const curB=computeAvg(snaps,"d30_butikk",30);
+          const lyB=computeAvg(snaps,"ly30_butikk",30);
+          const curM=computeAvg(snaps,"d30_mat",30);
+          const lyM=computeAvg(snaps,"ly30_mat",30);
+          const curV=computeAvg(snaps,"d30_volum",30);
+          const lyV=computeAvg(snaps,"ly30_volum",30);
+
+          const rows=[
+            {label:"Kunder / dag",cur:curK,ly:lyK,unit:""},
+            ...(showButikkMat?[
+              {label:"Butikk / dag",cur:curB,ly:lyB,unit:"kr"},
+              {label:"Mat / dag",cur:curM,ly:lyM,unit:"kr"},
+            ]:[]),
+            {label:"Volum / dag",cur:curV,ly:lyV,unit:"L"},
+          ];
+
+          return(
+            <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"14px 16px",marginBottom:10}}>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:8}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.ink}}>{label}</div>
+                <div style={{fontSize:11,color:C.muted}}>{snaps.length} stasjoner</div>
+              </div>
+              {rows.map((r,i)=>{
+                const p=pct(r.cur,r.ly);
+                return(
+                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"8px 0",borderTop:`1px solid ${C.line}`}}>
+                    <div style={{fontSize:13,color:C.body}}>{r.label}</div>
+                    <div style={{display:"flex",alignItems:"baseline",gap:10}}>
+                      <div style={{fontSize:15,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.3}}>{fmt(r.cur)}{r.unit?` ${r.unit}`:""}</div>
+                      {p!=null&&<div style={{fontSize:11,color:pctCol(p),fontVariantNumeric:"tabular-nums",minWidth:54,textAlign:"right"}}>{arrow(p)} {(p>0?"+":"")+p+"%"}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        };
+
+        return(
+          <div style={{padding:"28px 20px 0"}}>
+            <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>{isRS?`Region ${regionName}`:"Salgstall"}</div>
+              <div style={{fontSize:11,color:C.muted}}>Siste 30d vs fjor</div>
+            </div>
+            {typeBlock("Fullservice — snitt per stasjon",fullSnaps,true)}
+            {typeBlock("Automat — snitt per stasjon",autoSnaps,false)}
+          </div>
+        );
+      })()}
+
       {/* Nylig besøkt */}
       {myV.length>0&&(
         <div style={{padding:"28px 20px 0"}}>
@@ -1827,13 +1953,13 @@ function App(){
             const pctCol=p=>p==null?C.muted:p>0?C.ok:p<-5?C.bad:C.body;
 
             const d30=snap.d30_days||30;
-            const p90=snap.prev90_days||90;
+            const ly=snap.ly30_days||30;
 
             const rows=[
-              {label:"Kunder / dag",cur:snap.d30_kunder/d30,prev:snap.prev90_kunder/p90,reg:brRow?.kunder_per_day,land:bcRow?.kunder_per_day,unit:""},
-              {label:"Butikk / dag",cur:snap.d30_butikk/d30,prev:snap.prev90_butikk/p90,reg:brRow?.butikk_per_day,land:bcRow?.butikk_per_day,unit:"kr",hide:sv.type==="automat"},
-              {label:"Mat / dag",cur:snap.d30_mat/d30,prev:snap.prev90_mat/p90,reg:brRow?.mat_per_day,land:bcRow?.mat_per_day,unit:"kr",hide:sv.type==="automat"},
-              {label:"Volum / dag",cur:snap.d30_volum/d30,prev:snap.prev90_volum/p90,reg:brRow?.volum_per_day,land:bcRow?.volum_per_day,unit:"L"},
+              {label:"Kunder / dag",cur:snap.d30_kunder/d30,lyVal:snap.ly30_kunder/ly,reg:brRow?.kunder_per_day,land:bcRow?.kunder_per_day,unit:""},
+              {label:"Butikk / dag",cur:snap.d30_butikk/d30,lyVal:snap.ly30_butikk/ly,reg:brRow?.butikk_per_day,land:bcRow?.butikk_per_day,unit:"kr",hide:sv.type==="automat"},
+              {label:"Mat / dag",cur:snap.d30_mat/d30,lyVal:snap.ly30_mat/ly,reg:brRow?.mat_per_day,land:bcRow?.mat_per_day,unit:"kr",hide:sv.type==="automat"},
+              {label:"Volum / dag",cur:snap.d30_volum/d30,lyVal:snap.ly30_volum/ly,reg:brRow?.volum_per_day,land:bcRow?.volum_per_day,unit:"L"},
             ].filter(r=>!r.hide);
 
             return(
@@ -1843,7 +1969,7 @@ function App(){
                   <div style={{fontSize:11,color:C.muted}}>Siste 30 dager · snitt</div>
                 </div>
                 <div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.5}}>
-                  Sammenlignet med 90 dager før (vs 3 mnd), og mot snitt for {sv.type==="automat"?"automater":"fullservice-stasjoner"} i {regions.find(r=>r.id===sv.region_id)?.name||"regionen"} og hele YX.
+                  Sammenlignet med samme periode i fjor, og mot snitt for {sv.type==="automat"?"automater":"fullservice-stasjoner"} i {regions.find(r=>r.id===sv.region_id)?.name||"regionen"} og hele YX.
                 </div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -1851,14 +1977,14 @@ function App(){
                       <tr style={{color:C.muted,fontSize:11,textTransform:"uppercase",letterSpacing:0.4}}>
                         <th style={{textAlign:"left",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}></th>
                         <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Stasjon</th>
-                        <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>vs 3 mnd</th>
+                        <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>vs fjor</th>
                         <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Region</th>
                         <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Land</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((r,i)=>{
-                        const p=pct(r.cur,r.prev);
+                        const p=pct(r.cur,r.lyVal);
                         const regPct=pct(r.cur,r.reg);
                         const landPct=pct(r.cur,r.land);
                         return(
