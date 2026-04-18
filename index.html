@@ -1406,6 +1406,72 @@ function App(){
           </div>
         </div>
 
+        {/* Månedens kampanje — ekte data fra Supabase */}
+        {campaigns.length>0&&(()=>{
+          const c=campaigns[0];
+          let items=[];
+          try{items=typeof c.items==='string'?JSON.parse(c.items):(c.items||[]);}catch(e){}
+          if(items.length===0)return null;
+
+          // Group by type; preserve first-seen type order
+          const groupOrder=[];
+          const groups={};
+          items.forEach(it=>{
+            const t=it.type||"Annet";
+            if(!groups[t]){groups[t]=[];groupOrder.push(t);}
+            groups[t].push(it);
+          });
+
+          // Friendly labels for group types
+          const typeLabel={
+            A:"Mat (A)",
+            B:"Mat (B)",
+            Drikke:"Drikke",
+            Kiosk:"Kiosk",
+            Tilbehør:"Tilbehør",
+            Is:"Is",
+            COOP:"COOP",
+            Annet:"Annet",
+          };
+
+          return(
+            <div style={{padding:"32px 20px 0"}}>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6}}>Månedens kampanje</div>
+                <div style={{fontSize:11,color:C.muted}}>Fra databasen</div>
+              </div>
+              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"18px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:16,paddingBottom:14,borderBottom:`1px solid ${C.line}`}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:600,color:C.ink,letterSpacing:-0.2}}>{c.period}</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>Uke {c.start_week}–{c.end_week} · {items.length} varer</div>
+                  </div>
+                </div>
+                {groupOrder.map((gt,gi)=>(
+                  <div key={gt} style={{marginTop:gi?16:0}}>
+                    <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:8}}>{typeLabel[gt]||gt}</div>
+                    <div>
+                      {groups[gt].map((it,i)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",gap:12,padding:"8px 0",borderTop:i?`1px solid ${C.line}`:"none"}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,color:C.ink,fontWeight:500}}>{it.name}</div>
+                            {(it.placement||it.note)&&(
+                              <div style={{fontSize:12,color:C.muted,marginTop:2,lineHeight:1.4}}>
+                                {it.placement}{it.placement&&it.note?" · ":""}{it.note}
+                              </div>
+                            )}
+                          </div>
+                          {it.price&&<div style={{fontSize:13,fontWeight:500,color:C.body,flexShrink:0,whiteSpace:"nowrap",fontVariantNumeric:"tabular-nums"}}>{it.price}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Trend linjegraf */}
         <div style={{padding:"32px 20px 0"}}>
           <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Omsetning siste 12 måneder</div>
