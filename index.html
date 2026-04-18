@@ -1146,32 +1146,34 @@ function App(){
       return zones;
     };
 
-    // Soner — plassering på SVG (basert på YX sin offisielle stasjonstegning)
+    // Koordinater for soner på kundereise-bildet (i prosent av bildeflaten)
+    // Basert på YX sin offisielle illustrasjon (1600x933)
     const stationZones=[
-      {id:'1a',x:48,y:178,label:'Langs vei — fast aktivitet',desc:'Bukkeplakat (pølsetirsdag o.l.)'},
-      {id:'1b',x:118,y:178,label:'Langs vei — hovedkampanje',desc:'Bukkeplakat 70×100'},
-      {id:'2a',x:62,y:66,label:'A4 oppe på terminal',desc:'Lojalitet / COOP-kort'},
-      {id:'2b',x:125,y:108,label:'A4 nede på pumpe',desc:'Hovedkampanje / inntrekker'},
-      {id:'3',x:225,y:145,label:'Inngangsparti',desc:'Bukkeplakat ved døra'},
-      {id:'4',x:205,y:95,label:'Butikkfasade',desc:'Veggplakat 70×100'},
-      {id:'5',x:298,y:148,label:'Vaskehall',desc:'Bukkeplakat'},
-      {id:'6',x:258,y:78,label:'Banner på vegg',desc:'Storformat'},
-      {id:'7',x:85,y:118,label:'Nozzle',desc:'Pumpehåndtak'},
+      {id:'1a',x:68,y:82,label:'Langs vei — fast aktivitet',desc:'Bukkeplakat (pølsetirsdag o.l.)'},
+      {id:'1b',x:78,y:82,label:'Langs vei — hovedkampanje',desc:'Bukkeplakat 70×100'},
+      {id:'2a',x:27,y:56,label:'A4 oppe på terminal',desc:'Lojalitet / COOP-kort'},
+      {id:'2b',x:30,y:70,label:'A4 nede på pumpe',desc:'Hovedkampanje / inntrekker'},
+      {id:'3',x:38,y:75,label:'Inngangsparti',desc:'Bukkeplakat ved døra'},
+      {id:'4',x:56,y:63,label:'Butikkfasade',desc:'Veggplakat 70×100'},
+      {id:'5',x:11,y:75,label:'Vaskehall',desc:'Bukkeplakat'},
+      {id:'6',x:50,y:50,label:'Banner på vegg',desc:'Storformat (STEDSNAVN)'},
+      {id:'7',x:60,y:70,label:'Nozzle',desc:'Pumpehåndtak'},
     ];
 
     const activeZones=activeCampItem?new Set(parsePlacement(activeCampItem.placement)):null;
     const hasAnyActive=activeZones!==null;
+    const kundereise_url="https://qcdgkxixprvzymasbumi.supabase.co/storage/v1/object/public/campaign-files/kundereise.jpg";
 
     return(
       <div style={{paddingBottom:40,background:C.bg,minHeight:"100vh"}}>
         <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
         <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
 
-        {/* Greeting */}
-        <div style={{padding:"28px 20px 8px"}}>
-          <div style={{fontSize:28,fontWeight:600,color:C.ink,letterSpacing:-0.5,marginBottom:4}}>Månedens kampanje</div>
-          <div style={{fontSize:15,color:C.body}}>
-            {c?`${c.period} · Uke ${c.start_week}–${c.end_week}`:"Ingen aktiv kampanje"}
+        {/* Greeting — kompakt */}
+        <div style={{padding:"20px 20px 0"}}>
+          <div style={{fontSize:22,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Månedens kampanje</div>
+          <div style={{fontSize:13,color:C.muted,marginTop:2}}>
+            {c?`${c.period} · Uke ${c.start_week}–${c.end_week} · ${items.length} varer`:"Ingen aktiv kampanje"}
           </div>
         </div>
 
@@ -1185,143 +1187,69 @@ function App(){
 
         {c&&(
           <>
-            {/* PDF-knapp — prominent */}
-            {c.pdf_url&&(
-              <div style={{padding:"24px 20px 0"}}>
-                <a href={c.pdf_url} target="_blank" rel="noopener noreferrer"
-                  style={{display:"flex",alignItems:"center",gap:12,padding:"16px 18px",background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",textDecoration:"none"}}>
-                  <div style={{width:40,height:40,borderRadius:10,background:C.red,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <Icon name="download" size={20}/>
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:15,fontWeight:600,color:C.ink}}>Åpne kampanjeinformasjon</div>
-                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>Offisiell PDF med bilder og plassering</div>
-                  </div>
-                  <Icon name="chevronRight" size={18} color={C.muted}/>
-                </a>
-              </div>
-            )}
+            {/* Sticky kundereise-bilde med soner */}
+            <div style={{position:"sticky",top:56,zIndex:5,background:C.bg,padding:"14px 20px 8px"}}>
+              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 3px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+                {/* Bildet med overlay-markører */}
+                <div style={{position:"relative",width:"100%",paddingBottom:"58%",background:"#F5F5F5"}}>
+                  <img src={kundereise_url} alt="YX kundereise" style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"contain",display:"block"}}/>
 
-            {/* Stasjonsoversikt — SVG med plasseringer */}
-            <div style={{padding:"32px 20px 0"}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Plasseringsoversikt</div>
-              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",padding:"18px",position:"sticky",top:56,zIndex:5}}>
-                {activeCampItem?
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,padding:"10px 12px",background:C.subtle,borderRadius:8}}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeCampItem.name}</div>
-                      <div style={{fontSize:11,color:C.muted,marginTop:1}}>Plassering: {activeCampItem.placement||"—"}</div>
-                    </div>
-                    <button onClick={()=>setActiveCampItem(null)} aria-label="Lukk" style={{color:C.muted,padding:4,flexShrink:0}}><Icon name="x" size={16}/></button>
-                  </div>
-                :
-                  <div style={{fontSize:12,color:C.muted,marginBottom:10,lineHeight:1.4}}>Trykk på en kampanjevare nedenfor for å se hvor plakater og materiell skal plasseres.</div>
-                }
-
-                {/* SVG stasjonstegning */}
-                <svg viewBox="0 0 340 210" style={{width:"100%",height:"auto",display:"block"}}>
-                  {/* Grunn/forplass */}
-                  <rect x="0" y="130" width="340" height="70" fill="#E8ECEF"/>
-                  {/* Vei */}
-                  <rect x="0" y="192" width="340" height="18" fill="#9AA0A6"/>
-                  <line x1="0" y1="201" x2="340" y2="201" stroke="#fff" strokeWidth="1" strokeDasharray="8 6"/>
-
-                  {/* Canopy (tak over pumpeøy) */}
-                  <rect x="18" y="42" width="158" height="14" rx="1" fill="#CF122D"/>
-                  {/* YX logo på canopy */}
-                  <text x="97" y="53" fontSize="10" fontWeight="800" fill="white" textAnchor="middle" letterSpacing="1">YX</text>
-
-                  {/* Canopy support-søyler */}
-                  <rect x="28" y="56" width="3" height="88" fill="#9AA0A6"/>
-                  <rect x="163" y="56" width="3" height="88" fill="#9AA0A6"/>
-
-                  {/* Pumpeøy */}
-                  <rect x="40" y="140" width="130" height="6" fill="#B8BEC4"/>
-
-                  {/* Pumpe 1 (venstre) */}
-                  <rect x="58" y="80" width="16" height="60" rx="1" fill="#2A2F35"/>
-                  <rect x="60" y="82" width="12" height="14" fill="#4A5058"/>
-
-                  {/* Pumpe 2 (høyre) */}
-                  <rect x="118" y="80" width="16" height="60" rx="1" fill="#2A2F35"/>
-                  <rect x="120" y="82" width="12" height="14" fill="#4A5058"/>
-
-                  {/* Butikkbygg */}
-                  <rect x="185" y="65" width="108" height="80" fill="#FFFFFF" stroke="#B8BEC4" strokeWidth="1"/>
-                  {/* Blå topp-band */}
-                  <rect x="185" y="65" width="108" height="12" fill="#0C2340"/>
-                  <text x="239" y="74" fontSize="7" fontWeight="700" fill="white" textAnchor="middle" letterSpacing="0.5">BUTIKK</text>
-                  {/* Inngangsdør */}
-                  <rect x="220" y="118" width="22" height="27" fill="#E8ECEF" stroke="#B8BEC4" strokeWidth="1"/>
-                  {/* Vinduer */}
-                  <rect x="195" y="85" width="20" height="24" fill="#DDE3E8" stroke="#B8BEC4" strokeWidth="0.5"/>
-                  <rect x="255" y="85" width="28" height="24" fill="#DDE3E8" stroke="#B8BEC4" strokeWidth="0.5"/>
-
-                  {/* Vaskehall */}
-                  <rect x="293" y="85" width="36" height="60" fill="#F5F5F5" stroke="#B8BEC4" strokeWidth="1"/>
-                  <rect x="293" y="85" width="36" height="8" fill="#4A5058"/>
-                  <text x="311" y="109" fontSize="6" fontWeight="600" fill="#6B7280" textAnchor="middle">VASK</text>
-                  <rect x="300" y="120" width="22" height="25" fill="#E8ECEF" stroke="#B8BEC4" strokeWidth="0.5"/>
-
-                  {/* Bukker langs vei — små A-frame ikoner */}
-                  <g opacity={hasAnyActive&&!activeZones.has('1a')?0.25:1}>
-                    <path d="M 40 180 L 48 168 L 56 180 Z" fill="#FFFFFF" stroke="#333" strokeWidth="1"/>
-                  </g>
-                  <g opacity={hasAnyActive&&!activeZones.has('1b')?0.25:1}>
-                    <path d="M 110 180 L 118 168 L 126 180 Z" fill={activeZones&&activeZones.has('1b')?"#CF122D":"#FFFFFF"} stroke="#333" strokeWidth="1"/>
-                  </g>
-                  {/* Bukk ved inngangsparti (3) */}
-                  <g opacity={hasAnyActive&&!activeZones.has('3')?0.25:1}>
-                    <path d="M 218 148 L 226 138 L 234 148 Z" fill={activeZones&&activeZones.has('3')?"#CF122D":"#FFFFFF"} stroke="#333" strokeWidth="1"/>
-                  </g>
-                  {/* Bukk vaskehall (5) */}
-                  <g opacity={hasAnyActive&&!activeZones.has('5')?0.25:1}>
-                    <path d="M 291 152 L 299 142 L 307 152 Z" fill="#FFFFFF" stroke="#333" strokeWidth="1"/>
-                  </g>
-
-                  {/* A4 plakater på pumper */}
-                  <g opacity={hasAnyActive&&!activeZones.has('2a')?0.25:1}>
-                    <rect x="61" y="72" width="10" height="7" fill={activeZones&&activeZones.has('2a')?"#CF122D":"#F5A623"} stroke="#333" strokeWidth="0.5"/>
-                  </g>
-                  <g opacity={hasAnyActive&&!activeZones.has('2b')?0.25:1}>
-                    <rect x="120" y="102" width="12" height="9" fill={activeZones&&activeZones.has('2b')?"#CF122D":"#F5A623"} stroke="#333" strokeWidth="0.5"/>
-                  </g>
-
-                  {/* Banner på vegg (6) */}
-                  <g opacity={hasAnyActive&&!activeZones.has('6')?0.25:1}>
-                    <rect x="245" y="80" width="32" height="10" fill={activeZones&&activeZones.has('6')?"#CF122D":"#F5A623"} stroke="#333" strokeWidth="0.5"/>
-                  </g>
-
-                  {/* Veggplakat butikkfasade (4) */}
-                  <g opacity={hasAnyActive&&!activeZones.has('4')?0.25:1}>
-                    <rect x="200" y="95" width="10" height="13" fill={activeZones&&activeZones.has('4')?"#CF122D":"#F5A623"} stroke="#333" strokeWidth="0.5"/>
-                  </g>
-
-                  {/* Sonemarkører — tallede sirkler */}
+                  {/* Sone-markører */}
                   {stationZones.map(z=>{
                     const active=activeZones&&activeZones.has(z.id);
                     const dimmed=hasAnyActive&&!active;
                     return(
-                      <g key={z.id} opacity={dimmed?0.3:1}>
-                        <circle cx={z.x} cy={z.y} r="10" fill={active?"#CF122D":"#111111"} stroke="white" strokeWidth="2"/>
-                        <text x={z.x} y={z.y+3.5} fontSize={z.id.length>1?"8":"9"} fontWeight="700" fill="white" textAnchor="middle">{z.id}</text>
-                      </g>
+                      <div key={z.id} style={{
+                        position:"absolute",
+                        left:`${z.x}%`,top:`${z.y}%`,
+                        transform:"translate(-50%,-50%)",
+                        width:28,height:28,borderRadius:14,
+                        background:active?"#CF122D":"#111111",
+                        color:"#fff",
+                        fontSize:z.id.length>1?11:13,
+                        fontWeight:700,
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        border:"2px solid white",
+                        boxShadow:active?"0 0 0 4px rgba(207,18,45,0.25), 0 2px 6px rgba(0,0,0,0.3)":"0 2px 4px rgba(0,0,0,0.25)",
+                        opacity:dimmed?0.25:1,
+                        transition:"all .2s",
+                        pointerEvents:"none"
+                      }}>{z.id}</div>
                     );
                   })}
-                </svg>
+                </div>
 
-                {/* Legende */}
-                <div style={{marginTop:16,paddingTop:14,borderTop:`1px solid ${C.line}`}}>
-                  <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>Soner</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 16px"}}>
+                {/* Status-bar under bildet */}
+                {activeCampItem?
+                  <div style={{padding:"10px 14px",background:C.subtle,borderTop:`1px solid ${C.line}`,display:"flex",alignItems:"center",gap:10}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeCampItem.name}</div>
+                      <div style={{fontSize:11,color:C.muted,marginTop:1}}>{activeCampItem.placement||"—"}</div>
+                    </div>
+                    <button onClick={()=>setActiveCampItem(null)} aria-label="Lukk" style={{color:C.muted,padding:6,flexShrink:0}}><Icon name="x" size={16}/></button>
+                  </div>
+                :
+                  <div style={{padding:"10px 14px",fontSize:12,color:C.muted,borderTop:`1px solid ${C.line}`,textAlign:"center"}}>Trykk en kampanjevare under for å se plassering</div>
+                }
+              </div>
+            </div>
+
+            {/* Legende — collapsible */}
+            <div style={{padding:"8px 20px 0"}}>
+              <button onClick={()=>setShowPatterns(sp=>!sp)} style={{width:"100%",padding:"10px 14px",background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:12,fontWeight:500,color:C.body}}>
+                <span>Forklaring av soner (1a–7)</span>
+                <Icon name="chevronDown" size={16} color={C.muted}/>
+              </button>
+              {showPatterns&&(
+                <div style={{marginTop:8,background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"12px 14px"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr",gap:8}}>
                     {stationZones.map(z=>{
                       const active=activeZones&&activeZones.has(z.id);
-                      const dimmed=hasAnyActive&&!active;
                       return(
-                        <div key={z.id} style={{display:"flex",alignItems:"flex-start",gap:8,opacity:dimmed?0.4:1}}>
-                          <div style={{width:18,height:18,borderRadius:9,background:active?C.red:C.ink,color:"#fff",fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>{z.id}</div>
+                        <div key={z.id} style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                          <div style={{width:22,height:22,borderRadius:11,background:active?C.red:C.ink,color:"#fff",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>{z.id}</div>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:12,fontWeight:500,color:C.ink,lineHeight:1.3}}>{z.label}</div>
+                            <div style={{fontSize:13,fontWeight:500,color:C.ink,lineHeight:1.3}}>{z.label}</div>
                             <div style={{fontSize:11,color:C.muted,marginTop:1,lineHeight:1.3}}>{z.desc}</div>
                           </div>
                         </div>
@@ -1329,23 +1257,22 @@ function App(){
                     })}
                   </div>
                 </div>
-
-                {activeCampItem&&activeZones.size===0&&(
-                  <div style={{marginTop:12,padding:"10px 12px",background:C.warnSoft,border:`1px solid ${C.warn}33`,borderRadius:6,fontSize:12,color:C.body,lineHeight:1.4}}>
-                    Denne varen har plassering inne i butikken ({activeCampItem.placement}) — ikke på en av forplassens numrerte soner. Se PDF for detaljer.
-                  </div>
-                )}
-              </div>
+              )}
+              {activeCampItem&&activeZones.size===0&&(
+                <div style={{marginTop:8,padding:"10px 12px",background:C.warnSoft,border:`1px solid ${C.warn}33`,borderRadius:8,fontSize:12,color:C.body,lineHeight:1.4}}>
+                  Plassering inne i butikk ({activeCampItem.placement}). Ikke på en av forplassens numrerte soner — se PDF for detaljer.
+                </div>
+              )}
             </div>
 
             {/* Gruppert liste — tappable */}
             {orderedGroups.length>0&&(
-              <div style={{padding:"32px 20px 0"}}>
-                <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Kampanjevarer ({items.length})</div>
+              <div style={{padding:"20px 20px 0"}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:12}}>Kampanjevarer</div>
                 <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",overflow:"hidden"}}>
                   {orderedGroups.map((g,gi)=>(
-                    <div key={g.type} style={{padding:"16px 18px",borderTop:gi?`1px solid ${C.line}`:"none"}}>
-                      <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12}}>{g.label}</div>
+                    <div key={g.type} style={{padding:"14px 16px",borderTop:gi?`1px solid ${C.line}`:"none"}}>
+                      <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>{g.label}</div>
                       {g.items.map((it,i)=>{
                         const isActive=activeCampItem===it;
                         return(
@@ -1373,6 +1300,23 @@ function App(){
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* PDF-knapp — flyttet til bunn */}
+            {c.pdf_url&&(
+              <div style={{padding:"24px 20px 0"}}>
+                <a href={c.pdf_url} target="_blank" rel="noopener noreferrer"
+                  style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,textDecoration:"none"}}>
+                  <div style={{width:36,height:36,borderRadius:8,background:C.red,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Icon name="download" size={18}/>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:14,fontWeight:600,color:C.ink}}>Offisiell kampanje-PDF</div>
+                    <div style={{fontSize:11,color:C.muted,marginTop:1}}>Full dokumentasjon med bilder</div>
+                  </div>
+                  <Icon name="chevronRight" size={16} color={C.muted}/>
+                </a>
               </div>
             )}
           </>
