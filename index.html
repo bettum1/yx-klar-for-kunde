@@ -2039,6 +2039,138 @@ function App(){
         </div>
 
         <div style={{padding:"24px 20px"}}>
+          {/* Briefing — kort oppsummering før besøk */}
+          {(isRS||isLeder)&&(()=>{
+            const snap=salesSnapshot.find(s=>s.station_id===sv.id);
+            const stVisits=visits.filter(v=>v.station_id===sv.id);
+            const lastRSVisit=stVisits.filter(v=>v.visit_role==="rs").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+            const lastSLVisit=stVisits.filter(v=>v.visit_role==="sl").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+            const stActions=actions.filter(a=>a.station_id===sv.id);
+            const openActions=stActions.filter(a=>a.status==="open"||a.status==="in_progress");
+            const now=new Date();
+            const closedLast90=stActions.filter(a=>a.status==="completed"&&a.updated_at&&(now-new Date(a.updated_at))<90*86400000).length;
+
+            // Need at least some data to say anything useful
+            const hasSales=snap&&snap.d30_kunder>0;
+            const hasVisits=lastRSVisit||lastSLVisit;
+            if(!hasSales&&!hasVisits)return null;
+
+            const parts=[];
+
+            // === 1. SALGS-STATUS (hvis data finnes og LFL) ===
+            if(hasSales&&snap.ly30_kunder>0){
+              const kuPerDay=Math.round(snap.d30_kunder/30);
+              const kuChange=Math.round((snap.d30_kunder/30)/(snap.ly30_kunder/30)*100-100);
+              const brRow=benchRegion.find(b=>b.station_type===sv.type&&b.region_id===sv.region_id);
+              const regMedian=brRow?.kunder_per_day;
+
+              // Kunder vs region
+              let kuPosition="";
+              if(regMedian&&regMedian>0){
+                const vsReg=Math.round(kuPerDay/regMedian*100-100);
+                if(vsReg>30)kuPosition=` — langt over regionsmedian (${Math.round(regMedian)})`;
+                else if(vsReg>10)kuPosition=` — over regionsmedian (${Math.round(regMedian)})`;
+                else if(vsReg<-30)kuPosition=` — godt under regionsmedian (${Math.round(regMedian)})`;
+                else if(vsReg<-10)kuPosition=` — under regionsmedian (${Math.round(regMedian)})`;
+                else kuPosition=` — på linje med regionsmedian`;
+              }
+
+              let kuTrend="";
+              if(kuChange<=-10)kuTrend=`Kundetallet har falt ${Math.abs(kuChange)}% mot samme periode i fjor`;
+              else if(kuChange<=-5)kuTrend=`Kundetallet er ned ${Math.abs(kuChange)}% mot i fjor`;
+              else if(kuChange>=10)kuTrend=`Kundetallet har vokst ${kuChange}% mot samme periode i fjor`;
+              else if(kuChange>=5)kuTrend=`Kundetallet er opp ${kuChange}% mot i fjor`;
+              else kuTrend=`Kundetallet er omtrent stabilt mot i fjor (${kuChange>=0?"+":""}${kuChange}%)`;
+
+              parts.push(`${kuPerDay} kunder per dag${kuPosition}. ${kuTrend}.`);
+
+              // Butikk + mat trend (kun fullservice)
+              if(sv.type!=="automat"&&snap.ly30_butikk>0){
+                const bChange=Math.round((snap.d30_butikk)/(snap.ly30_butikk)*100-100);
+                const mChange=snap.ly30_mat>0?Math.round((snap.d30_mat)/(snap.ly30_mat)*100-100):null;
+
+                const trends=[];
+                if(Math.abs(bChange)>=5)trends.push(`Butikksalget er ${bChange>0?`opp ${bChange}%`:`ned ${Math.abs(bChange)}%`}`);
+                if(mChange!=null&&Math.abs(mChange)>=5)trends.push(`matsalget ${mChange>0?`opp ${mChange}%`:`ned ${Math.abs(mChange)}%`}`);
+                if(trends.length>0)parts.push(trends.join(", ")+" vs i fjor.");
+              }
+            }else if(hasSales){
+              // Sales data but no LY — show absolute
+              parts.push(`${Math.round(snap.d30_kunder/30)} kunder per dag siste 30 dager.`);
+            }
+
+            // === 2. BESØKSSTATUS ===
+            if(lastRSVisit){
+              const daysSince=Math.floor((now-new Date(lastRSVisit.created_at))/86400000);
+              const score=lastRSVisit.pct;
+              let timing="";
+              if(daysSince===0)timing="Besøkt i dag";
+              else if(daysSince===1)timing="Besøkt i går";
+              else if(daysSince<30)timing=`Besøkt for ${daysSince} dager siden`;
+              else if(daysSince<90)timing=`Siste besøk for ${daysSince} dager siden`;
+              else timing=`Ikke besøkt på ${daysSince} dager`;
+
+              let scoreLabel="";
+              if(score>=80)scoreLabel=` med god score (${score}%)`;
+              else if(score>=65)scoreLabel=` med score ${score}%`;
+              else scoreLabel=` med lav score (${score}%)`;
+
+              parts.push(`${timing}${scoreLabel}.`);
+            }else if(stVisits.length===0){
+              parts.push(`Stasjonen er ikke besøkt av regionssjef tidligere.`);
+            }
+
+            // === 3. TILTAK ===
+            if(openActions.length>0){
+              parts.push(`${openActions.length} åpne tiltak fra tidligere besøk.`);
+            }else if(closedLast90>=3){
+              parts.push(`${closedLast90} tiltak er lukket siste 90 dager.`);
+            }
+
+            // === 4. FOKUS-FORSLAG (basert på mønster) ===
+            let focus=null;
+            const kuChange=snap&&snap.ly30_kunder>0?Math.round((snap.d30_kunder/30)/(snap.ly30_kunder/30)*100-100):null;
+            const score=lastRSVisit?.pct;
+            const daysSinceRS=lastRSVisit?Math.floor((now-new Date(lastRSVisit.created_at))/86400000):null;
+
+            if(score!=null&&score>=75&&kuChange!=null&&kuChange<=-5){
+              focus="Score er høy men salget faller — undersøk hva som har endret seg";
+            }else if(score!=null&&score<=60&&kuChange!=null&&kuChange>=10){
+              focus="Stasjonen vokser trass lav score — verdt å forstå hvorfor";
+            }else if((daysSinceRS==null||daysSinceRS>=90)&&kuChange!=null&&kuChange<=-5){
+              focus="Lite besøk i det siste og fallende salg — tid for å bli kjent igjen";
+            }else if(openActions.length>=3){
+              focus="Flere åpne tiltak — prioriter status og fremdrift";
+            }else if(daysSinceRS!=null&&daysSinceRS<=60&&closedLast90>=2&&kuChange!=null&&kuChange<=-5){
+              focus="Tiltak er lukket men salget faller fortsatt — vurder om riktige grep er tatt";
+            }else if(kuChange!=null&&kuChange>=10&&score>=75){
+              focus="Stasjonen presterer godt på flere fronter — hva kan andre lære?";
+            }
+
+            if(parts.length===0&&!focus)return null;
+
+            return(
+              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:12,padding:"18px",marginBottom:24}}>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:10}}>
+                  <div style={{fontSize:15,fontWeight:600,color:C.ink}}>Briefing</div>
+                  <div style={{fontSize:11,color:C.muted}}>Før besøket</div>
+                </div>
+                <div style={{fontSize:14,color:C.body,lineHeight:1.55}}>
+                  {parts.join(" ")}
+                </div>
+                {focus&&(
+                  <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.line}`,display:"flex",gap:10,alignItems:"flex-start"}}>
+                    <div style={{width:4,alignSelf:"stretch",background:C.red,borderRadius:2,flexShrink:0,marginTop:2}}/>
+                    <div>
+                      <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:4}}>Forslag til fokus</div>
+                      <div style={{fontSize:14,color:C.ink,lineHeight:1.5}}>{focus}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Salgstall — intro-rapport før besøk */}
           {(()=>{
             const snap=salesSnapshot.find(s=>s.station_id===sv.id);
