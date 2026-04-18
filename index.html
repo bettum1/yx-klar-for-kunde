@@ -447,8 +447,10 @@ function BottomNav({view,setView,hmsCount,actionCount,plannedCount}){
         const active=view===it.id||(it.id==='visits'&&(view==='stationDetail'||view==='audit'));
         return(
           <button key={it.id} onClick={()=>setView(it.id)} style={{flex:1,padding:"10px 4px 12px",position:"relative"}}>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?C.ink:C.muted}}>
-              <Icon name={it.icon} size={22} stroke={active?2:1.6}/>
+            {/* Active indicator — red bar on top */}
+            {active&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:32,height:3,background:C.red,borderRadius:"0 0 3px 3px"}}/>}
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?C.red:C.muted}}>
+              <Icon name={it.icon} size={22} stroke={active?2.2:1.6}/>
               <span style={{fontSize:10,fontWeight:active?600:400,letterSpacing:-0.1}}>{it.label}</span>
             </div>
             {it.badge>0&&<div style={{position:"absolute",top:6,right:"calc(50% - 20px)",background:C.red,color:"#fff",fontSize:10,fontWeight:600,padding:"1px 5px",borderRadius:10,minWidth:16,lineHeight:"14px",textAlign:"center"}}>{it.badge}</div>}
