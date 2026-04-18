@@ -75,7 +75,7 @@ const C={
   faint:"#BABABA",         // disabled, hints
 
   // Surfaces
-  bg:"#FAFAFA",            // app background
+  bg:"#F0F2F5",            // app background
   surface:"#FFFFFF",       // cards
   subtle:"#F5F5F5",        // grouped backgrounds
   line:"#EDEDED",          // borders, dividers
@@ -1116,9 +1116,9 @@ function App(){
 
       {/* ────── NØKKELTALL ────── */}
       {(isRS||isLeder)&&(
-        <div style={{padding:"28px 20px 0"}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Nøkkeltall</div>
-          <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"18px 20px",display:"flex",gap:32}}>
+        <div style={{padding:"36px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Nøkkeltall</div>
+          <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",padding:"18px 20px",display:"flex",gap:32}}>
             <div>
               <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Besøk i måneden</div>
               <div style={{fontSize:28,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>{visitsThisMonth}</div>
@@ -1135,9 +1135,9 @@ function App(){
 
       {/* ────── DET JEG MÅ GJØRE ────── */}
       {(isRS||isLeder)&&(
-        <div style={{padding:"28px 20px 0"}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Det jeg må gjøre</div>
-          <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+        <div style={{padding:"36px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Det jeg må gjøre</div>
+          <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
 
             {notVisitedRecently>0&&(
               <button onClick={()=>setView("visits")} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
@@ -1244,7 +1244,7 @@ function App(){
 
             return(
               <div style={{marginTop:24}}>
-                <button onClick={()=>setShowPatterns(!showPatterns)} style={{width:"100%",background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                <button onClick={()=>setShowPatterns(!showPatterns)} style={{width:"100%",background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
                   <div style={{width:6,height:32,borderRadius:3,background:C.warn,flexShrink:0}}/>
                   <div style={{flex:1}}>
                     <div style={{fontSize:15,fontWeight:500,color:C.ink}}>Mønstre å undersøke ({patterns.length})</div>
@@ -1253,7 +1253,7 @@ function App(){
                   <Icon name={showPatterns?"chevronDown":"chevronRight"} size={16} color={C.muted}/>
                 </button>
                 {showPatterns&&(
-                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
                     {patterns.slice(0,10).map((p,i)=>(
                       <button key={p.station.id} onClick={()=>{setStationView(p.station);setView("stationDetail");}} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
                         <div style={{flex:1,minWidth:0}}>
@@ -1280,7 +1280,7 @@ function App(){
 
       {/* ────── MINE BESØK ────── (planlagt + nylig besøkt samlet) */}
       {(upcomingMine.length>0||myV.length>0)&&(
-        <div style={{padding:"28px 20px 0"}}>
+        <div style={{padding:"36px 20px 0"}}>
           <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
             <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Mine besøk</div>
             <button onClick={()=>setView("visits")} style={{fontSize:13,color:C.body,fontWeight:500}}>Se alle</button>
@@ -1289,7 +1289,7 @@ function App(){
           {upcomingMine.length>0&&(
             <div style={{marginBottom:myV.length>0?16:0}}>
               <div style={{fontSize:11,fontWeight:500,color:C.muted,letterSpacing:0.3,marginBottom:8}}>Planlagt</div>
-              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
                 {upcomingMine.slice(0,3).map(pv=>{
                   const st=stations.find(s=>s.id===pv.station_id);
                   if(!st)return null;
@@ -1312,7 +1312,7 @@ function App(){
           {myV.length>0&&(
             <div>
               <div style={{fontSize:11,fontWeight:500,color:C.muted,letterSpacing:0.3,marginBottom:8}}>Nylig besøkt</div>
-              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+              <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"}}>
                 {myV.slice(0,3).map(v=>{
                   const sn=stations.find(s=>s.id===v.station_id);
                   if(!sn)return null;
@@ -1356,12 +1356,12 @@ function App(){
           ].filter(r=>!r.hide);
 
           return(
-            <div style={{padding:"28px 20px 0"}}>
+            <div style={{padding:"36px 20px 0"}}>
               <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
                 <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Dine tall</div>
                 <div style={{fontSize:11,color:C.muted}}>Siste 30 dager</div>
               </div>
-              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"14px 16px"}}>
+              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",padding:"14px 16px"}}>
                 {rows.map((r,i)=>{
                   const p=pct(r.cur,r.ly);
                   return(
@@ -1426,7 +1426,7 @@ function App(){
           ];
 
           return(
-            <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"14px 16px",marginBottom:10}}>
+            <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",padding:"14px 16px",marginBottom:10}}>
               <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:8}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.ink}}>{label}</div>
                 <div style={{fontSize:11,color:C.muted}}>{snaps.length} stasjoner</div>
@@ -1448,7 +1448,7 @@ function App(){
         };
 
         return(
-          <div style={{padding:"28px 20px 0"}}>
+          <div style={{padding:"36px 20px 0"}}>
             <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>{isRS?`Region ${regionName}`:"Salgstall"}</div>
               <div style={{fontSize:11,color:C.muted}}>Siste 30d vs fjor</div>
