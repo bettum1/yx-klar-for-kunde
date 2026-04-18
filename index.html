@@ -521,6 +521,9 @@ function App(){
   const[operPoints,setOperPoints]=useState([]);
   const[operAcks,setOperAcks]=useState([]);
   const[plannedVisits,setPlannedVisits]=useState([]);
+  const[salesSnapshot,setSalesSnapshot]=useState([]);
+  const[benchRegion,setBenchRegion]=useState([]);
+  const[benchCountry,setBenchCountry]=useState([]);
   const[showPlanModal,setShowPlanModal]=useState(null); // {station} or null
   const[planDate,setPlanDate]=useState("");
   const[planNote,setPlanNote]=useState("");
@@ -584,6 +587,11 @@ function App(){
       try{
         const{data:pv}=await sb.from("planned_visits").select("*").eq("status","planned").order("planned_date",{ascending:true});setPlannedVisits(pv||[]);
       }catch(e){console.warn('Planned visits table not yet created');setPlannedVisits([]);}
+      try{
+        const{data:ss}=await sb.from("sales_snapshot").select("*");setSalesSnapshot(ss||[]);
+        const{data:br}=await sb.from("sales_benchmark_region").select("*");setBenchRegion(br||[]);
+        const{data:bc}=await sb.from("sales_benchmark_country").select("*");setBenchCountry(bc||[]);
+      }catch(e){console.warn('Sales tables not yet available');setSalesSnapshot([]);setBenchRegion([]);setBenchCountry([]);}
       if(st&&v)saveCache(st,v);
     }catch(e){console.warn('Data load failed, using cache:',e);}
     finally{setStLoad(false);}
@@ -1804,6 +1812,85 @@ function App(){
         </div>
 
         <div style={{padding:"24px 20px"}}>
+          {/* Salgstall — intro-rapport før besøk */}
+          {(()=>{
+            const snap=salesSnapshot.find(s=>s.station_id===sv.id);
+            if(!snap||snap.d30_kunder<1)return null;
+            const bcRow=benchCountry.find(b=>b.station_type===sv.type);
+            const brRow=benchRegion.find(b=>b.station_type===sv.type&&b.region_id===sv.region_id);
+            const fmt=(n,d=0)=>n==null?"—":Math.round(n).toLocaleString("nb-NO");
+            const pct=(cur,prev)=>{
+              if(!prev||prev===0)return null;
+              return Math.round((cur/prev-1)*100);
+            };
+            const arrow=p=>p==null?"":p>0?"▲":p<0?"▼":"—";
+            const pctCol=p=>p==null?C.muted:p>0?C.ok:p<-5?C.bad:C.body;
+
+            const d30=snap.d30_days||30;
+            const p90=snap.prev90_days||90;
+
+            const rows=[
+              {label:"Kunder / dag",cur:snap.d30_kunder/d30,prev:snap.prev90_kunder/p90,reg:brRow?.kunder_per_day,land:bcRow?.kunder_per_day,unit:""},
+              {label:"Butikk / dag",cur:snap.d30_butikk/d30,prev:snap.prev90_butikk/p90,reg:brRow?.butikk_per_day,land:bcRow?.butikk_per_day,unit:"kr",hide:sv.type==="automat"},
+              {label:"Mat / dag",cur:snap.d30_mat/d30,prev:snap.prev90_mat/p90,reg:brRow?.mat_per_day,land:bcRow?.mat_per_day,unit:"kr",hide:sv.type==="automat"},
+              {label:"Volum / dag",cur:snap.d30_volum/d30,prev:snap.prev90_volum/p90,reg:brRow?.volum_per_day,land:bcRow?.volum_per_day,unit:"L"},
+            ].filter(r=>!r.hide);
+
+            return(
+              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:12,padding:"18px",marginBottom:24}}>
+                <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:4}}>
+                  <div style={{fontSize:15,fontWeight:600,color:C.ink}}>Salgstall</div>
+                  <div style={{fontSize:11,color:C.muted}}>Siste 30 dager · snitt</div>
+                </div>
+                <div style={{fontSize:12,color:C.muted,marginBottom:14,lineHeight:1.5}}>
+                  Sammenlignet med 90 dager før (vs 3 mnd), og mot snitt for {sv.type==="automat"?"automater":"fullservice-stasjoner"} i {regions.find(r=>r.id===sv.region_id)?.name||"regionen"} og hele YX.
+                </div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                    <thead>
+                      <tr style={{color:C.muted,fontSize:11,textTransform:"uppercase",letterSpacing:0.4}}>
+                        <th style={{textAlign:"left",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}></th>
+                        <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Stasjon</th>
+                        <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>vs 3 mnd</th>
+                        <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Region</th>
+                        <th style={{textAlign:"right",padding:"8px 4px",fontWeight:500,borderBottom:`1px solid ${C.line}`}}>Land</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r,i)=>{
+                        const p=pct(r.cur,r.prev);
+                        const regPct=pct(r.cur,r.reg);
+                        const landPct=pct(r.cur,r.land);
+                        return(
+                          <tr key={i} style={{borderBottom:i<rows.length-1?`1px solid ${C.line}`:"none"}}>
+                            <td style={{padding:"10px 4px",color:C.body}}>{r.label}</td>
+                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",fontWeight:600,color:C.ink}}>
+                              {fmt(r.cur)}{r.unit?` ${r.unit}`:""}
+                            </td>
+                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",color:pctCol(p),fontSize:12}}>
+                              {p==null?"—":(p>0?"+":"")+p+"%"}
+                            </td>
+                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",color:C.muted,fontSize:12}}>
+                              <div style={{color:C.body,fontWeight:500}}>{fmt(r.reg)}</div>
+                              {regPct!=null&&<div style={{color:pctCol(regPct),fontSize:11,marginTop:1}}>{arrow(regPct)} {(regPct>0?"+":"")+regPct+"%"}</div>}
+                            </td>
+                            <td style={{padding:"10px 4px",textAlign:"right",fontVariantNumeric:"tabular-nums",color:C.muted,fontSize:12}}>
+                              <div style={{color:C.body,fontWeight:500}}>{fmt(r.land)}</div>
+                              {landPct!=null&&<div style={{color:pctCol(landPct),fontSize:11,marginTop:1}}>{arrow(landPct)} {(landPct>0?"+":"")+landPct+"%"}</div>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{fontSize:11,color:C.muted,marginTop:12,lineHeight:1.4}}>
+                  Tall hentes fra Qlik hver natt. Benchmarks er snitt per dag per stasjon av samme type.
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Coaching briefing — calm, focused, single card */}
           {coaching&&(isRS||isLeder)&&(
             <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:12,padding:"18px",marginBottom:24}}>
