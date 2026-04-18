@@ -1256,7 +1256,8 @@ function App(){
           ? stations.filter(s=>s.region_id===profile.region_id)
           : stations;
         const myIds=new Set(myStations.map(s=>s.id));
-        const mySnaps=salesSnapshot.filter(s=>myIds.has(s.station_id));
+        // LFL: må ha salg i begge perioder (nå og fjor)
+        const mySnaps=salesSnapshot.filter(s=>myIds.has(s.station_id)&&s.d30_kunder>0&&s.ly30_kunder>0);
         if(mySnaps.length===0)return null;
 
         // Split by type
