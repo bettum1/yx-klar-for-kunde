@@ -1194,6 +1194,62 @@ function App(){
           </div>
         </div>
 
+        {/* Månedens kampanje — ekte data fra Supabase */}
+        {campaigns.length>0&&(()=>{
+          const c=campaigns[0];
+          let items=[];try{items=typeof c.items==='string'?JSON.parse(c.items):(c.items||[]);}catch(e){}
+          if(items.length===0)return null;
+
+          // Gruppe etter type — i ønsket rekkefølge
+          const typeOrder=["A","B","Drikke","Kiosk","Tilbehør","Is","COOP"];
+          const typeLabel={A:"Mat — Kategori A",B:"Mat — Kategori B",Drikke:"Drikke",Kiosk:"Kiosk og snacks",Tilbehør:"Tilbehør",Is:"Is",COOP:"COOP-bonus"};
+          const grouped={};
+          items.forEach(it=>{if(!grouped[it.type])grouped[it.type]=[];grouped[it.type].push(it);});
+          const orderedGroups=typeOrder.filter(t=>grouped[t]).map(t=>({type:t,label:typeLabel[t]||t,items:grouped[t]}));
+
+          return(
+            <div style={{padding:"32px 20px 0"}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Månedens kampanje</div>
+              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",overflow:"hidden"}}>
+                <div style={{padding:"16px 18px",borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
+                  <div>
+                    <div style={{fontSize:16,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>{c.period}</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>Uke {c.start_week}–{c.end_week} · {items.length} kampanjevarer</div>
+                  </div>
+                  {c.pdf_url&&(
+                    <a href={c.pdf_url} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:C.ink,color:"#fff",borderRadius:8,fontSize:12,fontWeight:500,textDecoration:"none",flexShrink:0}}>
+                      <Icon name="download" size={14}/> PDF
+                    </a>
+                  )}
+                </div>
+
+                {orderedGroups.map((g,gi)=>(
+                  <div key={g.type} style={{padding:"14px 18px",borderTop:gi?`1px solid ${C.line}`:"none"}}>
+                    <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>{g.label}</div>
+                    {g.items.map((it,i)=>(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",gap:10}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:14,color:C.ink,fontWeight:500}}>{it.name}</div>
+                          {(it.placement||it.note)&&(
+                            <div style={{fontSize:11,color:C.muted,marginTop:2}}>
+                              {it.note&&<span style={{color:C.body,fontStyle:"italic"}}>{it.note}</span>}
+                              {it.note&&it.placement&&<span> · </span>}
+                              {it.placement}
+                            </div>
+                          )}
+                        </div>
+                        {it.price&&(
+                          <div style={{fontSize:13,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",flexShrink:0,textAlign:"right"}}>{it.price}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Trend linjegraf */}
         <div style={{padding:"32px 20px 0"}}>
           <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Omsetning siste 12 måneder</div>
