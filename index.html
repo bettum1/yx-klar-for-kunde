@@ -1281,8 +1281,8 @@ function App(){
       {/* ────── MINE BESØK ────── (planlagt + nylig besøkt samlet) */}
       {(upcomingMine.length>0||myV.length>0)&&(
         <div style={{padding:"36px 20px 0"}}>
-          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Mine besøk</div>
+          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6}}>Mine besøk</div>
             <button onClick={()=>setView("visits")} style={{fontSize:13,color:C.body,fontWeight:500}}>Se alle</button>
           </div>
 
@@ -1357,8 +1357,8 @@ function App(){
 
           return(
             <div style={{padding:"36px 20px 0"}}>
-              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-                <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Dine tall</div>
+              <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6}}>Dine tall</div>
                 <div style={{fontSize:11,color:C.muted}}>Siste 30 dager</div>
               </div>
               <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",padding:"14px 16px"}}>
@@ -1449,8 +1449,8 @@ function App(){
 
         return(
           <div style={{padding:"36px 20px 0"}}>
-            <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>{isRS?`Region ${regionName}`:"Salgstall"}</div>
+            <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6}}>{isRS?`Region ${regionName}`:"Salgstall"}</div>
               <div style={{fontSize:11,color:C.muted}}>Siste 30d vs fjor</div>
             </div>
             {typeBlock("Fullservice — snitt per stasjon",fullSnaps,true)}
