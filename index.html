@@ -524,6 +524,7 @@ function App(){
   const[salesSnapshot,setSalesSnapshot]=useState([]);
   const[benchRegion,setBenchRegion]=useState([]);
   const[benchCountry,setBenchCountry]=useState([]);
+  const[showPatterns,setShowPatterns]=useState(false);
   const[showPlanModal,setShowPlanModal]=useState(null); // {station} or null
   const[planDate,setPlanDate]=useState("");
   const[planNote,setPlanNote]=useState("");
@@ -1170,6 +1171,105 @@ function App(){
               </div>
             )}
           </div>
+
+          {/* Mønstre å undersøke — accordion */}
+          {(()=>{
+            // RS/Leder only — need sales data
+            if(salesSnapshot.length===0)return null;
+
+            // My stations
+            const myStations=isRS&&profile?.region_id
+              ? stations.filter(s=>s.region_id===profile.region_id)
+              : stations;
+            const myIds=new Set(myStations.map(s=>s.id));
+
+            // Build patterns
+            const now=new Date();
+            const patterns=[];
+
+            myStations.forEach(st=>{
+              const snap=salesSnapshot.find(s=>s.station_id===st.id);
+              if(!snap||snap.d30_kunder<=0||snap.ly30_kunder<=0)return; // LFL
+              const kuvekst=Math.round((snap.d30_kunder/30/(snap.ly30_kunder/30)-1)*100);
+
+              // Last score (RS visit preferred, else SL)
+              const stVisits=visits.filter(v=>v.station_id===st.id);
+              const lastRS=stVisits.filter(v=>v.visit_role==="rs").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+              const lastSL=stVisits.filter(v=>v.visit_role==="sl").sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+              const lastVisit=lastRS||lastSL;
+              const score=lastVisit?.pct;
+
+              const daysSinceVisit=lastRS?Math.floor((now-new Date(lastRS.created_at))/86400000):null;
+
+              // Tiltak lukket siste 90d
+              const stActions=actions.filter(a=>a.station_id===st.id);
+              const closedRecent=stActions.filter(a=>a.status==="completed"&&a.updated_at&&(now-new Date(a.updated_at))<90*86400000).length;
+
+              // 1. Høy score, fallende salg
+              if(score!=null&&score>=75&&kuvekst<=-5){
+                patterns.push({type:"highScoreFalling",station:st,score,kuvekst,daysSinceVisit,
+                  title:`Høy score (${score}%), men salget faller`,
+                  subtitle:`Kunder ${kuvekst>0?"+":""}${kuvekst}% vs fjor`});
+              }
+              // 2. Lav score, stigende salg
+              else if(score!=null&&score<=60&&kuvekst>=10){
+                patterns.push({type:"lowScoreRising",station:st,score,kuvekst,
+                  title:`Lav score (${score}%), men salget stiger`,
+                  subtitle:`Kunder +${kuvekst}% vs fjor`});
+              }
+              // 3. Ikke besøkt lenge, fallende salg
+              else if((daysSinceVisit==null||daysSinceVisit>=90)&&kuvekst<=-5){
+                patterns.push({type:"notVisitedFalling",station:st,kuvekst,daysSinceVisit,
+                  title:`${daysSinceVisit==null?"Aldri besøkt":`${daysSinceVisit} dager siden besøk`}, salget faller`,
+                  subtitle:`Kunder ${kuvekst}% vs fjor`});
+              }
+              // 4. Besøkt nylig + flere tiltak + faller
+              else if(daysSinceVisit!=null&&daysSinceVisit<=60&&closedRecent>=2&&kuvekst<=-5){
+                patterns.push({type:"visitedButFalling",station:st,score,kuvekst,closedRecent,
+                  title:`Oppfølgt, men salget faller`,
+                  subtitle:`${closedRecent} lukkede tiltak · kunder ${kuvekst}% vs fjor`});
+              }
+            });
+
+            if(patterns.length===0)return null;
+
+            // Sort by severity: highScoreFalling and visitedButFalling are most concerning
+            const prio={highScoreFalling:1,visitedButFalling:2,notVisitedFalling:3,lowScoreRising:4};
+            patterns.sort((a,b)=>(prio[a.type]||9)-(prio[b.type]||9)||a.kuvekst-b.kuvekst);
+
+            return(
+              <div style={{marginTop:24}}>
+                <button onClick={()=>setShowPatterns(!showPatterns)} style={{width:"100%",background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                  <div style={{width:6,height:32,borderRadius:3,background:C.warn,flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:15,fontWeight:500,color:C.ink}}>Mønstre å undersøke ({patterns.length})</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{showPatterns?"Skjul":"Besøksscore og salgsutvikling stemmer ikke overens"}</div>
+                  </div>
+                  <Icon name={showPatterns?"chevronDown":"chevronRight"} size={16} color={C.muted}/>
+                </button>
+                {showPatterns&&(
+                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+                    {patterns.slice(0,10).map((p,i)=>(
+                      <button key={p.station.id} onClick={()=>{setStationView(p.station);setView("stationDetail");}} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.station.name}</div>
+                          <div style={{fontSize:13,color:C.body,marginTop:2}}>{p.title}</div>
+                          <div style={{fontSize:12,color:C.muted,marginTop:2}}>{p.subtitle}</div>
+                        </div>
+                        <Icon name="chevronRight" size={16} color={C.muted}/>
+                      </button>
+                    ))}
+                    {patterns.length>10&&(
+                      <div style={{background:C.surface,padding:"10px 16px",fontSize:12,color:C.muted,textAlign:"center"}}>+{patterns.length-10} flere</div>
+                    )}
+                    <div style={{background:C.surface,padding:"12px 16px",fontSize:11,color:C.muted,lineHeight:1.4,borderTop:`1px solid ${C.line}`}}>
+                      Dette er korrelasjoner, ikke årsaksforklaringer. Bruk som hypotese-triggere for videre undersøkelse — ikke som fasit.
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
