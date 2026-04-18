@@ -433,18 +433,18 @@ function clearFromQueue(localId){
 }
 
 /* ── Bottom nav — icons, not emoji ── */
-function BottomNav({view,setView,operCount,actionCount}){
+function BottomNav({view,setView,hmsCount,actionCount,plannedCount}){
   const items=[
     {id:'home',icon:'home',label:'Hjem'},
-    {id:'hms',icon:'shield',label:'HMS'},
-    {id:'oper',icon:'bell',label:'Operativt',badge:operCount},
+    {id:'visits',icon:'mapPin',label:'Besøk',badge:plannedCount},
+    {id:'hms',icon:'shield',label:'HMS',badge:hmsCount},
     {id:'actions',icon:'list',label:'Tiltak',badge:actionCount},
     {id:'dash',icon:'chart',label:'Dashboard'},
   ];
   return(
     <div style={{position:"fixed",bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.line}`,display:"flex",zIndex:30,paddingBottom:"env(safe-area-inset-bottom)",maxWidth:720,margin:"0 auto"}}>
       {items.map(it=>{
-        const active=view===it.id;
+        const active=view===it.id||(it.id==='visits'&&(view==='stationDetail'||view==='audit'));
         return(
           <button key={it.id} onClick={()=>setView(it.id)} style={{flex:1,padding:"10px 4px 12px",position:"relative"}}>
             <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,color:active?C.ink:C.muted}}>
@@ -516,9 +516,14 @@ function App(){
   const[campaigns,setCampaigns]=useState([]);
   const[regions,setRegions]=useState([]);
   const[actionTab,setActionTab]=useState('open');
+  const[hmsTab,setHmsTab]=useState('arshjul');
   const[hmsChecks,setHmsChecks]=useState([]);
   const[operPoints,setOperPoints]=useState([]);
   const[operAcks,setOperAcks]=useState([]);
+  const[plannedVisits,setPlannedVisits]=useState([]);
+  const[showPlanModal,setShowPlanModal]=useState(null); // {station} or null
+  const[planDate,setPlanDate]=useState("");
+  const[planNote,setPlanNote]=useState("");
   const[showCompose,setShowCompose]=useState(false);
   const[composeForm,setComposeForm]=useState({title:"",description:"",priority:"medium",due_date:"",target_scope:"all"});
 
@@ -576,6 +581,9 @@ function App(){
         const{data:op}=await sb.from("operative_points").select("*").eq("active",true).order("created_at",{ascending:false});setOperPoints(op||[]);
         const{data:oa}=await sb.from("operative_ack").select("*");setOperAcks(oa||[]);
       }catch(e){console.warn('Operative tables not yet created');setOperPoints([]);setOperAcks([]);}
+      try{
+        const{data:pv}=await sb.from("planned_visits").select("*").eq("status","planned").order("planned_date",{ascending:true});setPlannedVisits(pv||[]);
+      }catch(e){console.warn('Planned visits table not yet created');setPlannedVisits([]);}
       if(st&&v)saveCache(st,v);
     }catch(e){console.warn('Data load failed, using cache:',e);}
     finally{setStLoad(false);}
@@ -836,6 +844,34 @@ function App(){
     }
   };
 
+  const createPlannedVisit=async()=>{
+    if(!showPlanModal?.station||!planDate){alert("Velg dato");return;}
+    try{
+      const{data,error}=await sb.from("planned_visits").insert({
+        station_id:showPlanModal.station.id,
+        planned_by:user.id,
+        planned_date:planDate,
+        note:planNote.trim()||null,
+        status:"planned"
+      }).select().single();
+      if(error)throw error;
+      setPlannedVisits(p=>[...p,data].sort((a,b)=>a.planned_date.localeCompare(b.planned_date)));
+      setShowPlanModal(null);
+      setPlanDate("");
+      setPlanNote("");
+    }catch(err){
+      alert("Kunne ikke planlegge: "+(err.message||"ukjent")+"\n\nHusk å kjøre planned_visits.sql i Supabase først.");
+    }
+  };
+
+  const cancelPlanned=async(id)=>{
+    if(!confirm("Fjern planlagt besøk?"))return;
+    try{
+      await sb.from("planned_visits").delete().eq("id",id);
+      setPlannedVisits(p=>p.filter(pv=>pv.id!==id));
+    }catch(err){alert("Kunne ikke fjerne: "+err.message);}
+  };
+
   const generateReport=(visit,stationName)=>{
     // HTML escape to prevent XSS from user input (station names, notes, visit_note)
     const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -958,6 +994,11 @@ function App(){
     return actions.filter(a=>scopedStationIds.has(a.station_id)&&(a.status==='open'||a.status==='in_progress')).length;
   },[actions,scopedStationIds]);
 
+  const myUpcomingPlanned=useMemo(()=>{
+    const today=new Date().toISOString().slice(0,10);
+    return plannedVisits.filter(pv=>pv.planned_by===user?.id&&pv.planned_date>=today&&pv.status==='planned').length;
+  },[plannedVisits,user]);
+
   const role=profile?.role;
   const isRS=role==="regionssjef";
   const isLeder=role==="leder";
@@ -1001,14 +1042,38 @@ function App(){
   if(view==="home"){
     const regionStationIds=isRS&&profile?.region_id?new Set(stations.filter(s=>s.region_id===profile.region_id).map(s=>s.id)):null;
     const scopedVisits=regionStationIds?visits.filter(v=>regionStationIds.has(v.station_id)):visits;
-    const myV=scopedVisits.filter(v=>isRS?v.visit_role==="rs":v.visit_role==="sl").slice(0,5);
+    const myV=scopedVisits.filter(v=>isRS?v.visit_role==="rs":v.visit_role==="sl").slice(0,4);
     const hour=new Date().getHours();
     const greeting=hour<10?"God morgen":hour<17?"Hei":"God kveld";
     const firstName=profile?.name?.split(" ")[0]||"";
 
+    // ── Denne måneden — handlingsdrivende KPIer ──
+    const today=new Date().toISOString().slice(0,10);
+    const in7Days=new Date(Date.now()+7*86400000).toISOString().slice(0,10);
+    const monthStart=new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString();
+    const thirtyDaysAgo=new Date(Date.now()-60*86400000).toISOString();
+
+    // Ikke besøkt siste 60 dager
+    const notVisitedRecently=scopedStationsForUser.filter(s=>{
+      const lastVisit=visits.find(v=>v.station_id===s.id&&v.visit_role==="rs");
+      return!lastVisit||lastVisit.created_at<thirtyDaysAgo;
+    }).length;
+
+    // Besøk denne måneden
+    const visitsThisMonth=scopedVisits.filter(v=>v.visit_role==="rs"&&v.created_at>=monthStart).length;
+
+    // Tiltak som forfaller denne uken
+    const actionsDueSoon=actions.filter(a=>scopedStationIds.has(a.station_id)&&(a.status==='open'||a.status==='in_progress')).length;
+
+    // Planlagte besøk denne uken
+    const upcomingMine=plannedVisits.filter(pv=>pv.planned_by===user?.id&&pv.planned_date>=today&&pv.planned_date<=in7Days&&pv.status==='planned');
+
+    // Snitt-score siste 30 dager
+    const recentVisits=scopedVisits.filter(v=>v.created_at>=thirtyDaysAgo);
+    const avgRecent=recentVisits.length?Math.round(recentVisits.reduce((s,v)=>s+v.pct,0)/recentVisits.length):null;
+
     return(
     <div style={{paddingBottom:100,background:C.surface,minHeight:"100vh"}}>
-      {/* Simple header — YX logo left, status + menu right */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.line}`}}>
         <img src={LC} alt="YX" style={{height:20}}/>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
@@ -1018,8 +1083,8 @@ function App(){
         </div>
       </div>
 
-      {/* Greeting — clean, conversational */}
-      <div style={{padding:"32px 20px 24px"}}>
+      {/* Greeting */}
+      <div style={{padding:"32px 20px 8px"}}>
         <div style={{fontSize:28,fontWeight:600,color:C.ink,letterSpacing:-0.5,marginBottom:4}}>{greeting}, {firstName}</div>
         <div style={{fontSize:15,color:C.body}}>
           {isRS?(myRegion?`Region ${myRegion.name} · ${scopedStationsForUser.length} stasjoner`:"Regionssjef"):
@@ -1028,9 +1093,9 @@ function App(){
         </div>
       </div>
 
-      {/* Draft banner — only when present */}
+      {/* Draft banner */}
       {draft&&(
-        <div style={{margin:"0 20px 24px",padding:"14px 16px",background:C.warnSoft,border:`1px solid ${C.warn}22`,borderRadius:12}}>
+        <div style={{margin:"16px 20px 0",padding:"14px 16px",background:C.warnSoft,border:`1px solid ${C.warn}22`,borderRadius:12}}>
           <div style={{fontSize:13,fontWeight:600,color:C.ink,marginBottom:2}}>Ulagret besøk</div>
           <div style={{fontSize:13,color:C.body,marginBottom:12}}>{draft.stationName} · {Object.keys(draft.scores||{}).length} punkter · {new Date(draft.savedAt).toLocaleString("nb-NO",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
           <div style={{display:"flex",gap:8}}>
@@ -1040,10 +1105,97 @@ function App(){
         </div>
       )}
 
-      {/* Recent visits — moved up, they're what you click most */}
+      {/* Denne måneden — handlingsdrivende KPIer */}
+      {(isRS||isLeder)&&(
+        <div style={{padding:"28px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Denne måneden</div>
+          <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+
+            {notVisitedRecently>0&&(
+              <button onClick={()=>setView("visits")} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                <div style={{width:6,height:32,borderRadius:3,background:C.warn,flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:15,fontWeight:500,color:C.ink}}>{notVisitedRecently} stasjoner ikke besøkt siste 60 dager</div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>Trenger oppfølging</div>
+                </div>
+                <Icon name="chevronRight" size={16} color={C.muted}/>
+              </button>
+            )}
+
+            {actionsDueSoon>0&&(
+              <button onClick={()=>setView("actions")} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                <div style={{width:6,height:32,borderRadius:3,background:C.bad,flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:15,fontWeight:500,color:C.ink}}>{actionsDueSoon} åpne tiltak</div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>Venter på lukking</div>
+                </div>
+                <Icon name="chevronRight" size={16} color={C.muted}/>
+              </button>
+            )}
+
+            {pendingOperCount>0&&(
+              <button onClick={()=>setView("hms")} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                <div style={{width:6,height:32,borderRadius:3,background:C.red,flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:15,fontWeight:500,color:C.ink}}>{pendingOperCount} operative krav venter</div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>Må kvitteres ut av stasjoner</div>
+                </div>
+                <Icon name="chevronRight" size={16} color={C.muted}/>
+              </button>
+            )}
+
+            {notVisitedRecently===0&&actionsDueSoon===0&&pendingOperCount===0&&(
+              <div style={{background:C.surface,padding:"20px 16px",color:C.muted,fontSize:14,textAlign:"center"}}>Ingenting som krever handling</div>
+            )}
+          </div>
+
+          {/* Number summary */}
+          <div style={{display:"flex",gap:24,marginTop:24}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Besøk i måneden</div>
+              <div style={{fontSize:24,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>{visitsThisMonth}</div>
+            </div>
+            {avgRecent!==null&&(
+              <div>
+                <div style={{fontSize:11,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>Snitt siste 30d</div>
+                <div style={{fontSize:24,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",letterSpacing:-0.5}}>{avgRecent}%</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Planlagte besøk */}
+      {upcomingMine.length>0&&(
+        <div style={{padding:"28px 20px 0"}}>
+          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5}}>Planlagte besøk</div>
+            <button onClick={()=>setView("visits")} style={{fontSize:13,color:C.body,fontWeight:500}}>Se alle</button>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+            {upcomingMine.slice(0,3).map(pv=>{
+              const st=stations.find(s=>s.id===pv.station_id);
+              if(!st)return null;
+              const days=Math.ceil((new Date(pv.planned_date)-new Date(today))/86400000);
+              const dayLabel=days===0?"I dag":days===1?"I morgen":`Om ${days} dager`;
+              return(
+                <button key={pv.id} onClick={()=>{setStationView(st);setView("stationDetail");}} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,textAlign:"left"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{dayLabel} · {new Date(pv.planned_date).toLocaleDateString("nb-NO",{weekday:"long",day:"numeric",month:"short"})}</div>
+                  </div>
+                  <Icon name="chevronRight" size={16} color={C.muted}/>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Nylig besøkt */}
       {myV.length>0&&(
-        <div style={{padding:"0 20px 24px"}}>
-          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Nylig besøkt</div>
+        <div style={{padding:"28px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Nylig besøkt</div>
           <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
             {myV.slice(0,3).map(v=>{
               const sn=stations.find(s=>s.id===v.station_id);
@@ -1062,37 +1214,89 @@ function App(){
         </div>
       )}
 
-      {/* Stations section header */}
-      <div style={{padding:"0 20px 14px"}}>
-        <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:10}}>Stasjoner</div>
+      <div style={{padding:"40px 20px 20px",textAlign:"center",color:C.faint,fontSize:11}}>
+        v27 · {online?"Online":"Offline"}
+      </div>
 
-        {/* Search */}
-        <div style={{position:"relative",marginBottom:8}}>
+      <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
+    </div>
+  );}
+
+  /* ── BESØK — stasjonsliste + planlagte ── */
+  if(view==="visits"){
+    const today=new Date().toISOString().slice(0,10);
+    const myPlanned=plannedVisits.filter(pv=>pv.planned_by===user?.id&&pv.status==='planned').sort((a,b)=>a.planned_date.localeCompare(b.planned_date));
+
+    return(
+    <div style={{paddingBottom:100,background:C.surface,minHeight:"100vh"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.line}`}}>
+        <img src={LC} alt="YX" style={{height:20}}/>
+        <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
+      </div>
+
+      <div style={{padding:"28px 20px 16px"}}>
+        <div style={{fontSize:12,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Besøk</div>
+        <div style={{fontSize:24,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Stasjoner og plan</div>
+      </div>
+
+      {/* Planlagte besøk seksjon */}
+      {myPlanned.length>0&&(
+        <div style={{padding:"0 20px 24px"}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Planlagte besøk</div>
+          <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+            {myPlanned.map(pv=>{
+              const st=stations.find(s=>s.id===pv.station_id);
+              if(!st)return null;
+              const days=Math.ceil((new Date(pv.planned_date)-new Date(today))/86400000);
+              const overdue=days<0;
+              const dayLabel=days<0?`${Math.abs(days)} dager forsinket`:days===0?"I dag":days===1?"I morgen":`Om ${days} dager`;
+              return(
+                <div key={pv.id} style={{background:C.surface,padding:"14px 16px",display:"flex",alignItems:"center",gap:12}}>
+                  <div style={{width:6,height:32,borderRadius:3,background:overdue?C.bad:days<=2?C.warn:C.ok,flexShrink:0}}/>
+                  <button onClick={()=>{setStationView(st);setView("stationDetail");}} style={{flex:1,minWidth:0,textAlign:"left"}}>
+                    <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
+                    <div style={{fontSize:12,color:overdue?C.bad:C.muted,marginTop:2}}>{dayLabel} · {new Date(pv.planned_date).toLocaleDateString("nb-NO",{weekday:"short",day:"numeric",month:"short"})}</div>
+                    {pv.note&&<div style={{fontSize:12,color:C.body,marginTop:4,fontStyle:"italic"}}>{pv.note}</div>}
+                  </button>
+                  <button onClick={()=>cancelPlanned(pv.id)} aria-label="Fjern" style={{color:C.muted,padding:8}}><Icon name="x" size={16}/></button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Stasjonsliste */}
+      <div style={{padding:"0 20px 14px"}}>
+        <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>{(isRS||isLeder)?"Stasjoner":"Stasjon"}</div>
+        <div style={{position:"relative",marginBottom:10}}>
           <div style={{position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:C.muted}}><Icon name="search" size={16}/></div>
           <input type="text" placeholder="Søk stasjon eller sted" value={search} onChange={e=>setSearch(e.target.value)}
             style={{width:"100%",padding:"11px 38px 11px 40px",borderRadius:10,background:C.subtle,border:`1px solid transparent`,fontSize:15,color:C.ink}}/>
           {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",padding:6,color:C.muted}}><Icon name="x" size={16}/></button>}
         </div>
-        <div style={{fontSize:12,color:C.muted}}>{filt.length} {search?"treff":"stasjoner"}{loc&&!search?" · sortert etter avstand":""}</div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:12}}>{filt.length} {search?"treff":"stasjoner"}{loc&&!search?" · sortert etter avstand":""}</div>
       </div>
 
-      {/* Station list */}
       {stLoad?<div style={{textAlign:"center",padding:40}}><div className="loader" style={{margin:"0 auto"}}/></div>:(
         <div style={{padding:"0 20px",display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden",margin:"0 20px"}}>
-          {filt.slice(0,showAll?filt.length:8).map(s=>{
+          {filt.slice(0,showAll?filt.length:20).map(s=>{
             const lv=visits.find(v=>v.station_id===s.id);
-            const se=getSE(s.id);
             const d=loc&&s.lat?dist(s):null;
             const distTxt=d?(d<1?`${Math.round(d*1000)} m`:`${d.toFixed(1)} km`):null;
+            const isPlanned=plannedVisits.find(pv=>pv.station_id===s.id&&pv.planned_by===user?.id&&pv.status==='planned');
             return(
               <button key={s.id} onClick={()=>{if(isRS||isLeder){setStationView(s);setView("stationDetail");}else{setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);setStation(s);setView("audit");}setShowAll(false);}}
                 style={{background:C.surface,padding:"14px 16px",textAlign:"left",display:"flex",alignItems:"center",gap:12}}>
                 <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</div>
-                  <div style={{fontSize:12,color:C.muted,marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{fontSize:15,fontWeight:500,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
+                    {s.name}
+                    {isPlanned&&<Icon name="clock" size={12} color={C.muted}/>}
+                  </div>
+                  <div style={{fontSize:12,color:C.muted,marginTop:2}}>
                     <span>{s.poststed}</span>
-                    {s.type==="automat"&&<span>· Automat</span>}
-                    {distTxt&&<span>· {distTxt}</span>}
+                    {s.type==="automat"&&<span> · Automat</span>}
+                    {distTxt&&<span> · {distTxt}</span>}
                   </div>
                 </div>
                 {lv&&<span style={{fontSize:13,fontWeight:500,color:C.body,fontVariantNumeric:"tabular-nums"}}>{lv.pct}%</span>}
@@ -1100,24 +1304,15 @@ function App(){
               </button>
             );
           })}
-          {!showAll&&filt.length>8&&(
+          {!showAll&&filt.length>20&&(
             <button onClick={()=>setShowAll(true)} style={{background:C.surface,padding:"14px 16px",textAlign:"center",color:C.body,fontSize:14,fontWeight:500}}>
               Se alle {filt.length} stasjoner
-            </button>
-          )}
-          {showAll&&filt.length>8&&(
-            <button onClick={()=>setShowAll(false)} style={{background:C.surface,padding:"12px",textAlign:"center",color:C.muted,fontSize:13}}>
-              Vis færre
             </button>
           )}
         </div>
       )}
 
-      <div style={{padding:"40px 20px 20px",textAlign:"center",color:C.faint,fontSize:11}}>
-        v25 · {online?"Online":"Offline"}
-      </div>
-
-      <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+      <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
     </div>
   );}
 
@@ -1598,9 +1793,14 @@ function App(){
             )}
           </div>
 
-          <button onClick={()=>{setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);setStation(sv);setView("audit");}} style={{marginTop:20,width:"100%",background:C.red,color:"#fff",padding:"12px 16px",borderRadius:10,fontSize:15,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            <Icon name="plus" size={16}/> Nytt besøk
-          </button>
+          <div style={{display:"flex",gap:8,marginTop:20}}>
+            <button onClick={()=>{setScores({});setNa({});setNotes({});setPhotos({});setVisitNote("");setCatIdx(0);setIncludeHms(null);setStation(sv);setView("audit");}} style={{flex:2,background:C.red,color:"#fff",padding:"12px 16px",borderRadius:10,fontSize:15,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <Icon name="plus" size={16}/> Nytt besøk
+            </button>
+            {(isRS||isLeder)&&<button onClick={()=>{setPlanDate(new Date(Date.now()+86400000).toISOString().slice(0,10));setPlanNote("");setShowPlanModal({station:sv});}} style={{flex:1,background:C.subtle,color:C.body,padding:"12px 16px",borderRadius:10,fontSize:14,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              <Icon name="clock" size={14}/> Planlegg
+            </button>}
+          </div>
         </div>
 
         <div style={{padding:"24px 20px"}}>
@@ -1716,13 +1916,34 @@ function App(){
           </div>
         </div>
 
-        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+        {/* Plan visit modal */}
+        {showPlanModal&&(
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowPlanModal(null)}>
+            <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderTopLeftRadius:16,borderTopRightRadius:16,padding:24,width:"100%",maxWidth:720}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                <div style={{fontSize:20,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Planlegg besøk</div>
+                <button onClick={()=>setShowPlanModal(null)} style={{color:C.muted,padding:6}}><Icon name="x" size={20}/></button>
+              </div>
+              <div style={{fontSize:14,color:C.body,marginBottom:20}}>{showPlanModal.station?.name}</div>
+
+              <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Dato</label>
+              <input type="date" value={planDate} onChange={e=>setPlanDate(e.target.value)} min={new Date().toISOString().slice(0,10)} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:16,background:C.subtle,color:C.ink}}/>
+
+              <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Notat <span style={{color:C.muted,fontWeight:400}}>(valgfritt)</span></label>
+              <textarea value={planNote} onChange={e=>setPlanNote(e.target.value)} placeholder="Hva vil du fokusere på? Avtale med stasjonsleder?" rows={3} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:24,fontFamily:"inherit",resize:"vertical",background:C.subtle,color:C.ink,lineHeight:1.5}}/>
+
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setShowPlanModal(null)} style={{flex:1,padding:"13px",background:C.subtle,color:C.body,borderRadius:10,fontWeight:500,fontSize:15}}>Avbryt</button>
+                <button onClick={createPlannedVisit} style={{flex:2,padding:"13px",background:C.ink,color:"#fff",borderRadius:10,fontWeight:500,fontSize:15}}>Legg til</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
       </div>
     );
   }
-
-  /* ── DASHBOARD ── */
-  /* ── HMS-ÅRSHJUL ── */
   if(view==="hms"){
     const curTertial=curT();
     const tertialInfo={t1:{name:"1. tertial",period:"Jan–Apr",endDate:"30. april"},t2:{name:"2. tertial",period:"Mai–Aug",endDate:"31. august"},t3:{name:"3. tertial",period:"Sep–Des",endDate:"31. desember"}};
@@ -1749,13 +1970,28 @@ function App(){
           <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
         </div>
 
-        <div style={{padding:"28px 20px 16px"}}>
-          <div style={{fontSize:12,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>HMS-årshjul {new Date().getFullYear()}</div>
-          <div style={{fontSize:26,fontWeight:600,color:C.ink,letterSpacing:-0.3,marginBottom:2}}>{tertialInfo[curTertial].name}</div>
-          <div style={{fontSize:14,color:C.body}}>{tertialInfo[curTertial].period} · lukkes {tertialInfo[curTertial].endDate}</div>
+        <div style={{padding:"28px 20px 0"}}>
+          <div style={{fontSize:12,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>HMS</div>
+          <div style={{fontSize:24,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Helse, miljø og sikkerhet</div>
+        </div>
 
-          {/* Progress — clean, no card */}
-          <div style={{marginTop:24}}>
+        {/* Tabs */}
+        <div style={{display:"flex",gap:2,padding:"20px 20px 0",borderBottom:`1px solid ${C.line}`,background:C.bg,position:"sticky",top:0,zIndex:10}}>
+          {[['arshjul','Årshjul'],['operativt','Operativt',pendingOperCount]].map(([key,label,count])=>(
+            <button key={key} onClick={()=>setHmsTab(key)} style={{padding:"12px 14px",background:"transparent",color:hmsTab===key?C.ink:C.muted,fontSize:14,fontWeight:hmsTab===key?600:400,borderBottom:`2px solid ${hmsTab===key?C.ink:"transparent"}`,marginBottom:-1,display:"flex",alignItems:"center",gap:6}}>
+              {label}
+              {count>0&&<span style={{background:C.red,color:"#fff",fontSize:10,fontWeight:600,padding:"1px 6px",borderRadius:8,fontVariantNumeric:"tabular-nums"}}>{count}</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* ── ÅRSHJUL ── */}
+        {hmsTab==='arshjul'&&<>
+        <div style={{padding:"24px 20px 16px"}}>
+          <div style={{fontSize:16,fontWeight:600,color:C.ink,marginBottom:4}}>{tertialInfo[curTertial].name}</div>
+          <div style={{fontSize:13,color:C.body}}>{tertialInfo[curTertial].period} · lukkes {tertialInfo[curTertial].endDate}</div>
+
+          <div style={{marginTop:20}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
               <span style={{fontSize:13,color:C.body}}>Fullført av stasjoner</span>
               <span style={{fontSize:14,fontWeight:500,color:C.ink,fontVariantNumeric:"tabular-nums"}}>{completedStations}/{stationsToShow.length}</span>
@@ -1764,10 +2000,10 @@ function App(){
               <div style={{height:"100%",width:stationsToShow.length>0?(completedStations/stationsToShow.length*100)+"%":"0%",background:completedStations===stationsToShow.length?C.ok:C.ink,borderRadius:2,transition:"width .5s"}}/>
             </div>
           </div>
-        </div>
+        </div></>}
 
         {/* For stasjonsleder — tertialpunkter som huk-av-liste */}
-        {isSL&&profile.station_id&&(()=>{
+        {hmsTab==='arshjul'&&isSL&&profile.station_id&&(()=>{
           const items=HMS_DATA[curTertial].items;
           const doneCount=items.filter(it=>hmsChecks.find(c=>c.station_id===profile.station_id&&c.item_id===it.id&&c.tertial===curTertial&&c.checked)).length;
           return(
@@ -1798,7 +2034,7 @@ function App(){
         })()}
 
         {/* For RS/leder — stasjonsliste etter status */}
-        {(isRS||isLeder)&&(
+        {hmsTab==='arshjul'&&(isRS||isLeder)&&(
           <div style={{padding:"24px 20px 0"}}>
             <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Stasjoner etter status</div>
             {stationStatus.length===0?
@@ -1827,174 +2063,151 @@ function App(){
           </div>
         )}
 
-        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
-      </div>
-    );
-  }
+        {/* ── OPERATIVT ── ad-hoc krav og pålegg */}
+        {hmsTab==='operativt'&&(()=>{
+          const active=operPoints.filter(op=>op.active);
+          const pointsWithStatus=active.map(op=>{
+            let targets=[];
+            if(op.target_scope==='all')targets=scopedStationsForUser.map(s=>s.id);
+            else if(op.target_scope==='region'&&op.target_region_ids)targets=scopedStationsForUser.filter(s=>op.target_region_ids.includes(s.region_id)).map(s=>s.id);
+            else if(op.target_scope==='stations'&&op.target_station_ids)targets=op.target_station_ids.filter(id=>scopedStationIds.has(id));
+            const acked=targets.filter(sid=>operAcks.find(a=>a.operative_id===op.id&&a.station_id===sid)).length;
+            return{...op,targetCount:targets.length,ackedCount:acked,targets};
+          }).filter(op=>op.targetCount>0);
+          const pending=pointsWithStatus.filter(op=>op.ackedCount<op.targetCount);
+          const completed=pointsWithStatus.filter(op=>op.ackedCount===op.targetCount&&op.targetCount>0);
 
-  /* ── OPERATIVE HMS-PUNKTER ── */
-  if(view==="oper"){
-    // Liste over alle aktive operative punkter — markér hvilke som er utkvittert for brukerens stasjon(er)
-    const active=operPoints.filter(op=>op.active);
-
-    const pointsWithStatus=active.map(op=>{
-      let targets=[];
-      if(op.target_scope==='all')targets=scopedStationsForUser.map(s=>s.id);
-      else if(op.target_scope==='region'&&op.target_region_ids)targets=scopedStationsForUser.filter(s=>op.target_region_ids.includes(s.region_id)).map(s=>s.id);
-      else if(op.target_scope==='stations'&&op.target_station_ids)targets=op.target_station_ids.filter(id=>scopedStationIds.has(id));
-      const acked=targets.filter(sid=>operAcks.find(a=>a.operative_id===op.id&&a.station_id===sid)).length;
-      return{...op,targetCount:targets.length,ackedCount:acked,targets};
-    }).filter(op=>op.targetCount>0);
-
-    const pending=pointsWithStatus.filter(op=>op.ackedCount<op.targetCount);
-    const completed=pointsWithStatus.filter(op=>op.ackedCount===op.targetCount&&op.targetCount>0);
-    return(
-      <div style={{paddingBottom:100,background:C.bg,minHeight:"100vh"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px",borderBottom:`1px solid ${C.line}`,background:C.surface}}>
-          <img src={LC} alt="YX" style={{height:20}}/>
-          <button onClick={logout} style={{fontSize:13,color:C.body,fontWeight:500,padding:"6px 0"}}>Logg ut</button>
-        </div>
-
-        <div style={{padding:"28px 20px 16px"}}>
-          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:12,fontWeight:500,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>Operative punkter</div>
-              <div style={{fontSize:26,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Ad-hoc krav</div>
-            </div>
-            {isLeder&&<button onClick={()=>setShowCompose(true)} style={{padding:"10px 14px",background:C.ink,color:"#fff",borderRadius:10,fontSize:14,fontWeight:500,display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-              <Icon name="plus" size={14}/> Nytt
-            </button>}
-          </div>
-        </div>
-
-        {/* Compose modal */}
-        {showCompose&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowCompose(false)}>
-            <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderTopLeftRadius:16,borderTopRightRadius:16,padding:24,width:"100%",maxWidth:720,maxHeight:"90vh",overflow:"auto"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
-                <div style={{fontSize:20,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Nytt operativt punkt</div>
-                <button onClick={()=>setShowCompose(false)} style={{color:C.muted,padding:6}}><Icon name="x" size={20}/></button>
-              </div>
-
-              <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Tittel</label>
-              <input type="text" value={composeForm.title} onChange={e=>setComposeForm(f=>({...f,title:e.target.value}))} placeholder="F.eks. Sjekk for skimmingutstyr" style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:16,background:C.subtle,color:C.ink}}/>
-
-              <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Beskrivelse</label>
-              <textarea value={composeForm.description} onChange={e=>setComposeForm(f=>({...f,description:e.target.value}))} placeholder="Detaljer, hva må gjøres, referanser" rows={4} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:16,fontFamily:"inherit",resize:"vertical",background:C.subtle,color:C.ink,lineHeight:1.5}}/>
-
-              <div style={{display:"flex",gap:10,marginBottom:16}}>
-                <div style={{flex:1}}>
-                  <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Prioritet</label>
-                  <select value={composeForm.priority} onChange={e=>setComposeForm(f=>({...f,priority:e.target.value}))} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,background:C.subtle,color:C.ink}}>
-                    <option value="low">Lav</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">Høy</option>
-                    <option value="critical">Kritisk</option>
-                  </select>
-                </div>
-                <div style={{flex:1}}>
-                  <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Frist</label>
-                  <input type="date" value={composeForm.due_date} onChange={e=>setComposeForm(f=>({...f,due_date:e.target.value}))} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,background:C.subtle,color:C.ink}}/>
+          return(
+            <>
+              <div style={{padding:"24px 20px 0"}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+                  <div style={{fontSize:16,fontWeight:600,color:C.ink}}>Ad-hoc krav og pålegg</div>
+                  {isLeder&&<button onClick={()=>setShowCompose(true)} style={{padding:"8px 14px",background:C.ink,color:"#fff",borderRadius:8,fontSize:13,fontWeight:500,display:"flex",alignItems:"center",gap:6}}>
+                    <Icon name="plus" size={14}/> Nytt
+                  </button>}
                 </div>
               </div>
 
-              <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Målgruppe</label>
-              <select value={composeForm.target_scope} onChange={e=>setComposeForm(f=>({...f,target_scope:e.target.value}))} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:24,background:C.subtle,color:C.ink}}>
-                <option value="all">Alle stasjoner</option>
-                <option value="region" disabled>Én region (kommer)</option>
-                <option value="stations" disabled>Utvalgte stasjoner (kommer)</option>
-              </select>
+              {pending.length===0&&completed.length===0&&(
+                <div style={{textAlign:"center",padding:"60px 20px",color:C.muted}}>
+                  <Icon name="bell" size={28} color={C.faint}/>
+                  <div style={{fontSize:15,fontWeight:500,color:C.body,marginTop:14}}>Ingen aktive krav</div>
+                  <div style={{fontSize:13,color:C.muted,marginTop:6,maxWidth:320,margin:"6px auto 0",lineHeight:1.5}}>Ad-hoc krav som skimming, IK-mat og smittevern dukker opp her når sentralt sender dem ut.</div>
+                </div>
+              )}
 
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>setShowCompose(false)} style={{flex:1,padding:"13px",background:C.subtle,color:C.body,borderRadius:10,fontWeight:500,fontSize:15}}>Avbryt</button>
-                <button onClick={createOperative} style={{flex:2,padding:"13px",background:C.red,color:"#fff",borderRadius:10,fontWeight:500,fontSize:15}}>Send ut</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Active points */}
-        {pending.length>0&&(
-          <div style={{padding:"0 20px 16px"}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Aktive</div>
-            <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {pending.map(op=>{
-                const daysLeft=op.due_date?Math.ceil((new Date(op.due_date)-new Date())/(86400000)):null;
-                const urgent=daysLeft!==null&&daysLeft<=2;
-                const high=op.priority==='high'||op.priority==='critical';
-                return(
-                  <div key={op.id} style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:12,padding:"16px 18px"}}>
-                    <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:6}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:16,fontWeight:500,color:C.ink,lineHeight:1.4}}>{op.title}</div>
-                      </div>
-                      {high&&<span style={{fontSize:11,fontWeight:500,color:C.bad,padding:"2px 8px",background:C.badSoft,borderRadius:4,flexShrink:0}}>Høy prioritet</span>}
-                    </div>
-
-                    {op.description&&<div style={{fontSize:14,color:C.body,marginBottom:12,whiteSpace:"pre-wrap",lineHeight:1.5}}>{op.description}</div>}
-
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,color:C.muted,marginBottom:8}}>
-                      <span style={{fontVariantNumeric:"tabular-nums"}}>{op.ackedCount}/{op.targetCount} kvittert</span>
-                      {op.due_date&&<span style={{color:urgent?C.bad:C.muted,fontWeight:urgent?500:400}}>
-                        {daysLeft<0?`Forfalt ${Math.abs(daysLeft)} d`:daysLeft===0?"Frist i dag":`${daysLeft} d igjen`}
-                      </span>}
-                    </div>
-
-                    <div style={{height:3,background:C.line,borderRadius:2,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:(op.ackedCount/op.targetCount*100)+"%",background:C.ink,borderRadius:2}}/>
-                    </div>
-
-                    {op.targets.length>0&&(
-                      <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.line}`}}>
-                        {op.targets.map(sid=>{
-                          const st=stations.find(s=>s.id===sid);
-                          if(!st)return null;
-                          const ack=getOpAck(op.id,sid);
-                          return(
-                            <div key={sid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0"}}>
-                              <div style={{fontSize:14,color:C.body,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
-                              {ack?<span style={{fontSize:12,color:C.ok,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
-                                <Icon name="check" size={14} color={C.ok}/> {new Date(ack.acknowledged_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}
-                              </span>:
-                                <button onClick={()=>ackOperative(op.id,sid,null,null)} style={{fontSize:13,fontWeight:500,color:"#fff",background:C.ink,padding:"7px 14px",borderRadius:8,minHeight:32}}>Kvitter ut</button>}
+              {pending.length>0&&(
+                <div style={{padding:"0 20px 16px"}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Aktive</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                    {pending.map(op=>{
+                      const daysLeft=op.due_date?Math.ceil((new Date(op.due_date)-new Date())/(86400000)):null;
+                      const urgent=daysLeft!==null&&daysLeft<=2;
+                      const high=op.priority==='high'||op.priority==='critical';
+                      return(
+                        <div key={op.id} style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:12,padding:"16px 18px"}}>
+                          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10,marginBottom:6}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:16,fontWeight:500,color:C.ink,lineHeight:1.4}}>{op.title}</div>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                            {high&&<span style={{fontSize:11,fontWeight:500,color:C.bad,padding:"2px 8px",background:C.badSoft,borderRadius:4,flexShrink:0}}>Høy</span>}
+                          </div>
+                          {op.description&&<div style={{fontSize:14,color:C.body,marginBottom:12,whiteSpace:"pre-wrap",lineHeight:1.5}}>{op.description}</div>}
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,color:C.muted,marginBottom:8}}>
+                            <span style={{fontVariantNumeric:"tabular-nums"}}>{op.ackedCount}/{op.targetCount} kvittert</span>
+                            {op.due_date&&<span style={{color:urgent?C.bad:C.muted,fontWeight:urgent?500:400}}>
+                              {daysLeft<0?`Forfalt ${Math.abs(daysLeft)} d`:daysLeft===0?"Frist i dag":`${daysLeft} d igjen`}
+                            </span>}
+                          </div>
+                          <div style={{height:3,background:C.line,borderRadius:2,overflow:"hidden"}}>
+                            <div style={{height:"100%",width:(op.ackedCount/op.targetCount*100)+"%",background:C.ink,borderRadius:2}}/>
+                          </div>
+                          {op.targets.length>0&&(
+                            <div style={{marginTop:14,paddingTop:12,borderTop:`1px solid ${C.line}`}}>
+                              {op.targets.map(sid=>{
+                                const st=stations.find(s=>s.id===sid);
+                                if(!st)return null;
+                                const ack=getOpAck(op.id,sid);
+                                return(
+                                  <div key={sid} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0"}}>
+                                    <div style={{fontSize:14,color:C.body,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{st.name}</div>
+                                    {ack?<span style={{fontSize:12,color:C.ok,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
+                                      <Icon name="check" size={14} color={C.ok}/> {new Date(ack.acknowledged_at).toLocaleDateString("nb-NO",{day:"numeric",month:"short"})}
+                                    </span>:
+                                      <button onClick={()=>ackOperative(op.id,sid,null,null)} style={{fontSize:13,fontWeight:500,color:"#fff",background:C.ink,padding:"7px 14px",borderRadius:8,minHeight:32}}>Kvitter ut</button>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {pending.length===0&&completed.length===0&&(
-          <div style={{textAlign:"center",padding:"80px 20px",color:C.muted}}>
-            <Icon name="bell" size={32} color={C.faint}/>
-            <div style={{fontSize:15,fontWeight:500,color:C.body,marginTop:16}}>Ingen aktive operative punkter</div>
-            <div style={{fontSize:13,color:C.muted,marginTop:8,maxWidth:320,margin:"8px auto 0",lineHeight:1.5}}>Når sentralt sender ut ad-hoc krav — skimming, smittevern, IK-mat — dukker de opp her.</div>
-          </div>
-        )}
-
-        {/* Completed */}
-        {completed.length>0&&(
-          <div style={{padding:"16px 20px 0"}}>
-            <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Fullført</div>
-            <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
-              {completed.map(op=>(
-                <div key={op.id} style={{background:C.surface,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-                  <div style={{flex:1,minWidth:0,fontSize:14,color:C.body,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{op.title}</div>
-                  <span style={{fontSize:12,color:C.ok,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
-                    <Icon name="check" size={14} color={C.ok}/> {op.ackedCount}/{op.targetCount}
-                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              )}
 
-        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+              {completed.length>0&&(
+                <div style={{padding:"16px 20px 0"}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.5,marginBottom:12}}>Fullført</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:1,background:C.line,border:`1px solid ${C.line}`,borderRadius:10,overflow:"hidden"}}>
+                    {completed.map(op=>(
+                      <div key={op.id} style={{background:C.surface,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                        <div style={{flex:1,minWidth:0,fontSize:14,color:C.body,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{op.title}</div>
+                        <span style={{fontSize:12,color:C.ok,fontWeight:500,display:"flex",alignItems:"center",gap:4}}>
+                          <Icon name="check" size={14} color={C.ok}/> {op.ackedCount}/{op.targetCount}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Compose modal */}
+              {showCompose&&(
+                <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:50,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={()=>setShowCompose(false)}>
+                  <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderTopLeftRadius:16,borderTopRightRadius:16,padding:24,width:"100%",maxWidth:720,maxHeight:"90vh",overflow:"auto"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+                      <div style={{fontSize:20,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>Nytt operativt punkt</div>
+                      <button onClick={()=>setShowCompose(false)} style={{color:C.muted,padding:6}}><Icon name="x" size={20}/></button>
+                    </div>
+                    <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Tittel</label>
+                    <input type="text" value={composeForm.title} onChange={e=>setComposeForm(f=>({...f,title:e.target.value}))} placeholder="F.eks. Sjekk for skimmingutstyr" style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:16,background:C.subtle,color:C.ink}}/>
+                    <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Beskrivelse</label>
+                    <textarea value={composeForm.description} onChange={e=>setComposeForm(f=>({...f,description:e.target.value}))} placeholder="Detaljer, hva må gjøres, referanser" rows={4} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:16,fontFamily:"inherit",resize:"vertical",background:C.subtle,color:C.ink,lineHeight:1.5}}/>
+                    <div style={{display:"flex",gap:10,marginBottom:16}}>
+                      <div style={{flex:1}}>
+                        <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Prioritet</label>
+                        <select value={composeForm.priority} onChange={e=>setComposeForm(f=>({...f,priority:e.target.value}))} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,background:C.subtle,color:C.ink}}>
+                          <option value="low">Lav</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">Høy</option>
+                          <option value="critical">Kritisk</option>
+                        </select>
+                      </div>
+                      <div style={{flex:1}}>
+                        <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Frist</label>
+                        <input type="date" value={composeForm.due_date} onChange={e=>setComposeForm(f=>({...f,due_date:e.target.value}))} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,background:C.subtle,color:C.ink}}/>
+                      </div>
+                    </div>
+                    <label style={{display:"block",fontSize:13,fontWeight:500,color:C.body,marginBottom:6}}>Målgruppe</label>
+                    <select value={composeForm.target_scope} onChange={e=>setComposeForm(f=>({...f,target_scope:e.target.value}))} style={{width:"100%",padding:"12px 14px",fontSize:15,border:`1px solid ${C.line}`,borderRadius:10,marginBottom:24,background:C.subtle,color:C.ink}}>
+                      <option value="all">Alle stasjoner</option>
+                      <option value="region" disabled>Én region (kommer)</option>
+                      <option value="stations" disabled>Utvalgte stasjoner (kommer)</option>
+                    </select>
+                    <div style={{display:"flex",gap:10}}>
+                      <button onClick={()=>setShowCompose(false)} style={{flex:1,padding:"13px",background:C.subtle,color:C.body,borderRadius:10,fontWeight:500,fontSize:15}}>Avbryt</button>
+                      <button onClick={createOperative} style={{flex:2,padding:"13px",background:C.red,color:"#fff",borderRadius:10,fontWeight:500,fontSize:15}}>Send ut</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
+
+        <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
       </div>
     );
   }
@@ -2071,7 +2284,7 @@ function App(){
           }
         </div>
 
-        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+        <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
       </div>
     );
   }
@@ -2262,7 +2475,7 @@ function App(){
           }
         </div>
 
-        <BottomNav view={view} setView={setView} operCount={pendingOperCount} actionCount={openActionCount}/>
+        <BottomNav view={view} setView={setView} hmsCount={pendingOperCount} actionCount={openActionCount} plannedCount={myUpcomingPlanned}/>
       </div>
     );
   }
