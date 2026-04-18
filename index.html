@@ -113,6 +113,7 @@ function Icon({name,size=18,stroke=1.8,color="currentColor"}){
     chevronRight:"M9 18l6-6-6-6",
     chevronDown:"M6 9l6 6 6-6",
     menu:"M3 12h18M3 6h18M3 18h18",
+    tag:"M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z M7 7h.01",
     alert:"M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z",
     mic:"M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z M19 10v2a7 7 0 01-14 0v-2 M12 19v4 M8 23h8",
     clock:"M12 22a10 10 0 100-20 10 10 0 000 20z M12 6v6l4 2",
@@ -457,6 +458,7 @@ function SideMenu({open,onClose,currentSection,setSection,onLogout,profile}){
   const items=[
     {id:'kfk',label:'Klar for Kunde',icon:'shield',desc:'Stasjonsbesøk, HMS og tiltak'},
     {id:'sales',label:'Mine salgstall',icon:'chart',desc:'Utvidet analyse og trender'},
+    {id:'campaign',label:'Månedens kampanje',icon:'tag',desc:'Aktuelle kampanjer og plassering'},
   ];
   return(
     <>
@@ -1117,6 +1119,98 @@ function App(){
     </div>
   );
 
+  /* ── MÅNEDENS KAMPANJE — egen seksjon ── */
+  if(section==="campaign"){
+    const c=campaigns[0];
+    let items=[];
+    if(c){try{items=typeof c.items==='string'?JSON.parse(c.items):(c.items||[]);}catch(e){}}
+
+    const typeOrder=["A","B","Drikke","Kiosk","Tilbehør","Is","COOP"];
+    const typeLabel={A:"Mat — Kategori A",B:"Mat — Kategori B",Drikke:"Drikke",Kiosk:"Kiosk og snacks",Tilbehør:"Tilbehør",Is:"Is",COOP:"COOP-bonus"};
+    const grouped={};
+    items.forEach(it=>{if(!grouped[it.type])grouped[it.type]=[];grouped[it.type].push(it);});
+    const orderedGroups=typeOrder.filter(t=>grouped[t]).map(t=>({type:t,label:typeLabel[t]||t,items:grouped[t]}));
+
+    return(
+      <div style={{paddingBottom:40,background:C.bg,minHeight:"100vh"}}>
+        <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+        <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
+
+        {/* Greeting */}
+        <div style={{padding:"28px 20px 8px"}}>
+          <div style={{fontSize:28,fontWeight:600,color:C.ink,letterSpacing:-0.5,marginBottom:4}}>Månedens kampanje</div>
+          <div style={{fontSize:15,color:C.body}}>
+            {c?`${c.period} · Uke ${c.start_week}–${c.end_week}`:"Ingen aktiv kampanje"}
+          </div>
+        </div>
+
+        {!c&&(
+          <div style={{padding:"60px 20px",textAlign:"center",color:C.muted}}>
+            <Icon name="tag" size={28} color={C.faint}/>
+            <div style={{fontSize:15,fontWeight:500,color:C.body,marginTop:14}}>Ingen aktiv kampanje</div>
+            <div style={{fontSize:13,color:C.muted,marginTop:6,maxWidth:320,margin:"6px auto 0",lineHeight:1.5}}>Neste kampanje vises her når den publiseres.</div>
+          </div>
+        )}
+
+        {c&&(
+          <>
+            {/* PDF-knapp — prominent */}
+            {c.pdf_url&&(
+              <div style={{padding:"24px 20px 0"}}>
+                <a href={c.pdf_url} target="_blank" rel="noopener noreferrer"
+                  style={{display:"flex",alignItems:"center",gap:12,padding:"16px 18px",background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",textDecoration:"none"}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:C.red,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Icon name="download" size={20}/>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:600,color:C.ink}}>Åpne kampanjeinformasjon</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>Offisiell PDF med bilder og plassering</div>
+                  </div>
+                  <Icon name="chevronRight" size={18} color={C.muted}/>
+                </a>
+              </div>
+            )}
+
+            {/* Gruppert liste */}
+            {orderedGroups.length>0&&(
+              <div style={{padding:"32px 20px 0"}}>
+                <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Kampanjevarer ({items.length})</div>
+                <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",overflow:"hidden"}}>
+                  {orderedGroups.map((g,gi)=>(
+                    <div key={g.type} style={{padding:"16px 18px",borderTop:gi?`1px solid ${C.line}`:"none"}}>
+                      <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:12}}>{g.label}</div>
+                      {g.items.map((it,i)=>(
+                        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"8px 0",gap:10,borderTop:i?`1px solid ${C.line}`:"none"}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,color:C.ink,fontWeight:500}}>{it.name}</div>
+                            {(it.placement||it.note)&&(
+                              <div style={{fontSize:12,color:C.muted,marginTop:3,lineHeight:1.4}}>
+                                {it.note&&<span style={{color:C.body,fontStyle:"italic"}}>{it.note}</span>}
+                                {it.note&&it.placement&&<span> · </span>}
+                                {it.placement}
+                              </div>
+                            )}
+                          </div>
+                          {it.price&&(
+                            <div style={{fontSize:13,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",flexShrink:0,textAlign:"right"}}>{it.price}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        <div style={{padding:"40px 20px 20px",textAlign:"center",color:C.faint,fontSize:11}}>
+          Månedens kampanje
+        </div>
+      </div>
+    );
+  }
+
   /* ── MINE SALGSTALL — egen seksjon ── */
   if(section==="sales"){
     // Demo data
@@ -1193,62 +1287,6 @@ function App(){
             ))}
           </div>
         </div>
-
-        {/* Månedens kampanje — ekte data fra Supabase */}
-        {campaigns.length>0&&(()=>{
-          const c=campaigns[0];
-          let items=[];try{items=typeof c.items==='string'?JSON.parse(c.items):(c.items||[]);}catch(e){}
-          if(items.length===0)return null;
-
-          // Gruppe etter type — i ønsket rekkefølge
-          const typeOrder=["A","B","Drikke","Kiosk","Tilbehør","Is","COOP"];
-          const typeLabel={A:"Mat — Kategori A",B:"Mat — Kategori B",Drikke:"Drikke",Kiosk:"Kiosk og snacks",Tilbehør:"Tilbehør",Is:"Is",COOP:"COOP-bonus"};
-          const grouped={};
-          items.forEach(it=>{if(!grouped[it.type])grouped[it.type]=[];grouped[it.type].push(it);});
-          const orderedGroups=typeOrder.filter(t=>grouped[t]).map(t=>({type:t,label:typeLabel[t]||t,items:grouped[t]}));
-
-          return(
-            <div style={{padding:"32px 20px 0"}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.ink,textTransform:"uppercase",letterSpacing:0.6,marginBottom:14}}>Månedens kampanje</div>
-              <div style={{background:C.surface,border:`1px solid ${C.line}`,borderRadius:10,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",overflow:"hidden"}}>
-                <div style={{padding:"16px 18px",borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
-                  <div>
-                    <div style={{fontSize:16,fontWeight:600,color:C.ink,letterSpacing:-0.3}}>{c.period}</div>
-                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>Uke {c.start_week}–{c.end_week} · {items.length} kampanjevarer</div>
-                  </div>
-                  {c.pdf_url&&(
-                    <a href={c.pdf_url} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:C.ink,color:"#fff",borderRadius:8,fontSize:12,fontWeight:500,textDecoration:"none",flexShrink:0}}>
-                      <Icon name="download" size={14}/> PDF
-                    </a>
-                  )}
-                </div>
-
-                {orderedGroups.map((g,gi)=>(
-                  <div key={g.type} style={{padding:"14px 18px",borderTop:gi?`1px solid ${C.line}`:"none"}}>
-                    <div style={{fontSize:11,fontWeight:600,color:C.muted,textTransform:"uppercase",letterSpacing:0.4,marginBottom:10}}>{g.label}</div>
-                    {g.items.map((it,i)=>(
-                      <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"6px 0",gap:10}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:14,color:C.ink,fontWeight:500}}>{it.name}</div>
-                          {(it.placement||it.note)&&(
-                            <div style={{fontSize:11,color:C.muted,marginTop:2}}>
-                              {it.note&&<span style={{color:C.body,fontStyle:"italic"}}>{it.note}</span>}
-                              {it.note&&it.placement&&<span> · </span>}
-                              {it.placement}
-                            </div>
-                          )}
-                        </div>
-                        {it.price&&(
-                          <div style={{fontSize:13,fontWeight:600,color:C.ink,fontVariantNumeric:"tabular-nums",flexShrink:0,textAlign:"right"}}>{it.price}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })()}
 
         {/* Trend linjegraf */}
         <div style={{padding:"32px 20px 0"}}>
