@@ -125,6 +125,9 @@ function Icon({name,size=18,stroke=1.8,color="currentColor"}){
     edit:"M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z",
     filter:"M22 3H2l8 9.46V19l4 2v-8.54L22 3z",
     signal:"M2 20h.01 M7 20v-4 M12 20V10 M17 20V4 M22 20h.01",
+    folder:"M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z",
+    send:"M22 2L11 13 M22 2l-7 20-4-9-9-4 20-7z",
+    file:"M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z M13 2v7h7",
   };
   const d=paths[name];if(!d)return null;
   return(<svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{d.split(' M').map((p,i)=><path key={i} d={i===0?p:'M'+p}/>)}</svg>);
@@ -459,6 +462,7 @@ function SideMenu({open,onClose,currentSection,setSection,onLogout,profile}){
     {id:'kfk',label:'Klar for Kunde',icon:'shield',desc:'Stasjonsbesøk, HMS og tiltak'},
     {id:'sales',label:'Mine salgstall',icon:'chart',desc:'Utvidet analyse og trender'},
     {id:'campaign',label:'Månedens kampanje',icon:'tag',desc:'Aktuelle kampanjer og plassering'},
+    {id:'filer',label:'Filer',icon:'folder',desc:'Dokumenter, rutiner og leverandørinfo'},
   ];
   return(
     <>
@@ -591,7 +595,7 @@ function App(){
   const[showPatterns,setShowPatterns]=useState(false);
   const[visitSort,setVisitSort]=useState("distance");
   const[menuOpen,setMenuOpen]=useState(false);
-  const[section,setSection]=useState("kfk"); // "kfk" | "sales" | "campaign"
+  const[section,setSection]=useState("kfk"); // "kfk" | "sales" | "campaign" | "filer"
   const[activeCampItem,setActiveCampItem]=useState(null);
   const switchSection=(s)=>{
     setSection(s);
@@ -1342,6 +1346,108 @@ function App(){
         <div style={{padding:"40px 20px 20px",textAlign:"center",color:C.faint,fontSize:11}}>
           Månedens kampanje
         </div>
+      </div>
+    );
+  }
+
+  /* ── FILER — dokumenter og rutiner ── */
+  if(section==="filer"){
+    const folders=[
+      {id:"kampanje",name:"Kampanjeinformasjon",icon:"📁",color:"#F5C518",count:0,desc:"Kampanjebriefs, produktark og plakater"},
+      {id:"hms",name:"HMS-rutiner",icon:"📁",color:"#F5C518",count:0,desc:"HMS-dokumenter, beredskapsplaner og sjekklister"},
+      {id:"renhold",name:"Renholdsrutiner",icon:"📁",color:"#F5C518",count:0,desc:"Renholdsrutiner, sjekklister og veiledninger"},
+    ];
+    const[openFolder,setOpenFolder]=useState(null);
+    const[sendingDoc,setSendingDoc]=useState(null);
+    
+    const demoFiles={
+      kampanje:[
+        {id:"k1",name:"K-5 Kampanjeinfo — Uke 17-20.pdf",type:"pdf",size:"2.4 MB"},
+        {id:"k2",name:"A-kampanje boller 3pk — produktark.pdf",type:"pdf",size:"850 KB"},
+        {id:"k3",name:"Uslåelig Burger — konseptbeskrivelse.pdf",type:"pdf",size:"1.1 MB"},
+      ],
+      hms:[
+        {id:"h1",name:"Beredskapsplan — mal for stasjoner.pdf",type:"pdf",size:"1.8 MB"},
+        {id:"h2",name:"Brannvernrutine — gjennomgang.pdf",type:"pdf",size:"920 KB"},
+        {id:"h3",name:"Vernerunde — sjekkliste.pdf",type:"pdf",size:"640 KB"},
+      ],
+      renhold:[
+        {id:"re1",name:"Daglig renholdsrutine — butikk.pdf",type:"pdf",size:"520 KB"},
+        {id:"re2",name:"Renhold forplass — veiledning.pdf",type:"pdf",size:"380 KB"},
+        {id:"re3",name:"Toalettsjekk — loggskjema.pdf",type:"pdf",size:"210 KB"},
+      ],
+    };
+
+    const handleSend=(file)=>{
+      setSendingDoc(file.id);
+      setTimeout(()=>{
+        setSendingDoc(null);
+        alert(`"${file.name}" er sendt til stasjonen.`);
+      },1200);
+    };
+
+    return(
+      <div style={{minHeight:"100vh",background:C.bg}}>
+        <AppHeader online={online} queueCount={queueCount} syncing={syncing} syncQueue={syncQueue} onMenu={()=>setMenuOpen(true)}/>
+        <SideMenu open={menuOpen} onClose={()=>setMenuOpen(false)} currentSection={section} setSection={switchSection} onLogout={logout} profile={profile}/>
+        
+        {!openFolder?(
+          <div style={{padding:20}}>
+            <h2 style={{fontSize:18,fontWeight:700,color:C.ink,marginBottom:4}}>Dokumenter</h2>
+            <p style={{fontSize:13,color:C.muted,marginBottom:20}}>Rutiner, kampanjeinformasjon og hjelpemidler for stasjoner.</p>
+            
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {folders.map(f=>(
+                <button key={f.id} onClick={()=>setOpenFolder(f.id)}
+                  style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:C.surface,borderRadius:14,border:`1px solid ${C.line}`,textAlign:"left",boxShadow:"0 1px 2px rgba(0,0,0,.04)"}}>
+                  <div style={{width:48,height:48,borderRadius:12,background:"#FEF3C7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>
+                    📁
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:600,color:C.ink}}>{f.name}</div>
+                    <div style={{fontSize:12,color:C.muted,marginTop:2}}>{f.desc}</div>
+                  </div>
+                  <Icon name="chevronRight" size={18} color={C.faint}/>
+                </button>
+              ))}
+            </div>
+          </div>
+        ):(
+          <div>
+            {/* Folder header with back button */}
+            <div style={{padding:"16px 20px",background:C.surface,borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"center",gap:12}}>
+              <button onClick={()=>setOpenFolder(null)} style={{padding:6,color:C.muted}}>
+                <Icon name="arrowLeft" size={20}/>
+              </button>
+              <div style={{fontSize:28}}>📁</div>
+              <div>
+                <div style={{fontSize:16,fontWeight:700,color:C.ink}}>{folders.find(f=>f.id===openFolder)?.name}</div>
+                <div style={{fontSize:12,color:C.muted}}>{(demoFiles[openFolder]||[]).length} dokumenter</div>
+              </div>
+            </div>
+
+            {/* File list */}
+            <div style={{padding:12}}>
+              {(demoFiles[openFolder]||[]).map(file=>(
+                <div key={file.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:C.surface,borderRadius:12,border:`1px solid ${C.line}`,marginBottom:8}}>
+                  <div style={{width:40,height:40,borderRadius:10,background:C.subtle,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <Icon name="file" size={20} color={C.muted}/>
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.name}</div>
+                    <div style={{fontSize:11,color:C.faint,marginTop:2}}>{file.type.toUpperCase()} · {file.size}</div>
+                  </div>
+                  <button onClick={()=>handleSend(file)} disabled={sendingDoc===file.id}
+                    style={{padding:"8px 14px",borderRadius:8,background:sendingDoc===file.id?C.subtle:C.red,color:sendingDoc===file.id?C.muted:"#fff",
+                      fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexShrink:0,opacity:sendingDoc===file.id?.6:1}}>
+                    <Icon name="send" size={14} color={sendingDoc===file.id?C.muted:"#fff"}/>
+                    {sendingDoc===file.id?"Sender...":"Send"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
