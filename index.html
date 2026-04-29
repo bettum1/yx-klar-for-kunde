@@ -597,6 +597,8 @@ function App(){
   const[menuOpen,setMenuOpen]=useState(false);
   const[openFolder,setOpenFolder]=useState(null);
   const[sendingDoc,setSendingDoc]=useState(null);
+  const[folderDocs,setFolderDocs]=useState([]);
+  const[uploadingFile,setUploadingFile]=useState(false);
   const[section,setSection]=useState("kfk"); // "kfk" | "sales" | "campaign" | "filer"
   const[activeCampItem,setActiveCampItem]=useState(null);
   const switchSection=(s)=>{
@@ -1356,28 +1358,47 @@ function App(){
   /* ── FILER — dokumenter og rutiner ── */
   if(section==="filer"){
     const folders=[
-      {id:"kampanje",name:"Kampanjeinformasjon",icon:"📁",color:"#F5C518",count:0,desc:"Kampanjebriefs, produktark og plakater"},
-      {id:"hms",name:"HMS-rutiner",icon:"📁",color:"#F5C518",count:0,desc:"HMS-dokumenter, beredskapsplaner og sjekklister"},
-      {id:"renhold",name:"Renholdsrutiner",icon:"📁",color:"#F5C518",count:0,desc:"Renholdsrutiner, sjekklister og veiledninger"},
+      {id:"kampanje",name:"Kampanjeinformasjon",icon:"📁",desc:"Kampanjebriefs, produktark og plakater"},
+      {id:"hms",name:"HMS-rutiner",icon:"📁",desc:"HMS-dokumenter, beredskapsplaner og sjekklister"},
+      {id:"renhold",name:"Renholdsrutiner",icon:"📁",desc:"Renholdsrutiner, sjekklister og veiledninger"},
     ];
-    // State managed at top level: openFolder, sendingDoc
-    
-    const demoFiles={
-      kampanje:[
-        {id:"k1",name:"K-5 Kampanjeinfo — Uke 17-20.pdf",type:"pdf",size:"2.4 MB"},
-        {id:"k2",name:"A-kampanje boller 3pk — produktark.pdf",type:"pdf",size:"850 KB"},
-        {id:"k3",name:"Uslåelig Burger — konseptbeskrivelse.pdf",type:"pdf",size:"1.1 MB"},
-      ],
-      hms:[
-        {id:"h1",name:"Beredskapsplan — mal for stasjoner.pdf",type:"pdf",size:"1.8 MB"},
-        {id:"h2",name:"Brannvernrutine — gjennomgang.pdf",type:"pdf",size:"920 KB"},
-        {id:"h3",name:"Vernerunde — sjekkliste.pdf",type:"pdf",size:"640 KB"},
-      ],
-      renhold:[
-        {id:"re1",name:"Daglig renholdsrutine — butikk.pdf",type:"pdf",size:"520 KB"},
-        {id:"re2",name:"Renhold forplass — veiledning.pdf",type:"pdf",size:"380 KB"},
-        {id:"re3",name:"Toalettsjekk — loggskjema.pdf",type:"pdf",size:"210 KB"},
-      ],
+
+    const loadFolderDocs=async(folderId)=>{
+      const{data}=await sb.from("documents").select("*").eq("folder",folderId).order("created_at",{ascending:false});
+      setFolderDocs(data||[]);
+    };
+
+    const openFolderFn=(folderId)=>{
+      setOpenFolder(folderId);
+      loadFolderDocs(folderId);
+    };
+
+    const handleUpload=async(e)=>{
+      const f=e.target.files?.[0];
+      if(!f||!openFolder||!user)return;
+      setUploadingFile(true);
+      try{
+        const ext=f.name.split('.').pop()||'pdf';
+        const path=`${openFolder}/${Date.now()}-${Math.random().toString(36).slice(2,7)}.${ext}`;
+        const{error:upErr}=await sb.storage.from('documents').upload(path,f,{contentType:f.type,upsert:false});
+        if(upErr)throw upErr;
+        const{data:urlData}=sb.storage.from('documents').getPublicUrl(path);
+        const sizeKB=Math.round(f.size/1024);
+        const sizeStr=sizeKB>1024?(sizeKB/1024).toFixed(1)+' MB':sizeKB+' KB';
+        await sb.from("documents").insert({
+          folder:openFolder,
+          name:f.name,
+          file_url:urlData.publicUrl,
+          file_type:ext.toLowerCase(),
+          file_size:sizeStr,
+          uploaded_by:user.id,
+        });
+        loadFolderDocs(openFolder);
+      }catch(err){
+        console.error("Upload failed:",err);
+        alert("Opplasting feilet. Prøv igjen.");
+      }
+      setUploadingFile(false);
     };
 
     const handleSend=(file)=>{
@@ -1387,6 +1408,14 @@ function App(){
         alert(`"${file.name}" er sendt til stasjonen.`);
       },1200);
     };
+
+    const handleDelete=async(file)=>{
+      if(!confirm(`Slette "${file.name}"?`))return;
+      await sb.from("documents").delete().eq("id",file.id);
+      loadFolderDocs(openFolder);
+    };
+
+    const fileInputRef=React.createRef();
 
     return(
       <div style={{minHeight:"100vh",background:C.bg}}>
@@ -1400,7 +1429,7 @@ function App(){
             
             <div style={{display:"flex",flexDirection:"column",gap:12}}>
               {folders.map(f=>(
-                <button key={f.id} onClick={()=>setOpenFolder(f.id)}
+                <button key={f.id} onClick={()=>openFolderFn(f.id)}
                   style={{display:"flex",alignItems:"center",gap:16,padding:"18px 20px",background:C.surface,borderRadius:14,border:`1px solid ${C.line}`,textAlign:"left",boxShadow:"0 1px 2px rgba(0,0,0,.04)"}}>
                   <div style={{width:48,height:48,borderRadius:12,background:"#FEF3C7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}>
                     📁
@@ -1416,35 +1445,60 @@ function App(){
           </div>
         ):(
           <div>
-            {/* Folder header with back button */}
+            {/* Folder header */}
             <div style={{padding:"16px 20px",background:C.surface,borderBottom:`1px solid ${C.line}`,display:"flex",alignItems:"center",gap:12}}>
-              <button onClick={()=>setOpenFolder(null)} style={{padding:6,color:C.muted}}>
+              <button onClick={()=>{setOpenFolder(null);setFolderDocs([]);}} style={{padding:6,color:C.muted}}>
                 <Icon name="arrowLeft" size={20}/>
               </button>
               <div style={{fontSize:28}}>📁</div>
-              <div>
+              <div style={{flex:1}}>
                 <div style={{fontSize:16,fontWeight:700,color:C.ink}}>{folders.find(f=>f.id===openFolder)?.name}</div>
-                <div style={{fontSize:12,color:C.muted}}>{(demoFiles[openFolder]||[]).length} dokumenter</div>
+                <div style={{fontSize:12,color:C.muted}}>{folderDocs.length} dokumenter</div>
               </div>
             </div>
 
+            {/* Upload button */}
+            <div style={{padding:"12px 20px"}}>
+              <input type="file" ref={fileInputRef} onChange={handleUpload} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" style={{display:"none"}}/>
+              <button onClick={()=>fileInputRef.current?.click()} disabled={uploadingFile}
+                style={{width:"100%",padding:14,borderRadius:12,border:`2px dashed ${C.line}`,background:C.subtle,
+                  color:uploadingFile?C.faint:C.body,fontSize:14,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                <Icon name="plus" size={18} color={uploadingFile?C.faint:C.body}/>
+                {uploadingFile?"Laster opp...":"Last opp fil"}
+              </button>
+            </div>
+
             {/* File list */}
-            <div style={{padding:12}}>
-              {(demoFiles[openFolder]||[]).map(file=>(
-                <div key={file.id} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",background:C.surface,borderRadius:12,border:`1px solid ${C.line}`,marginBottom:8}}>
+            <div style={{padding:"0 12px 12px"}}>
+              {folderDocs.length===0&&!uploadingFile&&(
+                <div style={{textAlign:"center",padding:32,color:C.muted,fontSize:13}}>
+                  Ingen filer ennå. Trykk "Last opp fil" for å legge til.
+                </div>
+              )}
+              {folderDocs.map(file=>(
+                <div key={file.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:C.surface,borderRadius:12,border:`1px solid ${C.line}`,marginBottom:8}}>
                   <div style={{width:40,height:40,borderRadius:10,background:C.subtle,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                     <Icon name="file" size={20} color={C.muted}/>
                   </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:600,color:C.ink,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{file.name}</div>
-                    <div style={{fontSize:11,color:C.faint,marginTop:2}}>{file.type.toUpperCase()} · {file.size}</div>
+                  <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>window.open(file.file_url,"_blank")}>
+                    <div style={{fontSize:13,fontWeight:600,color:B,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:"underline"}}>{file.name}</div>
+                    <div style={{fontSize:11,color:C.faint,marginTop:2}}>{(file.file_type||"").toUpperCase()} · {file.file_size||""}</div>
                   </div>
-                  <button onClick={()=>handleSend(file)} disabled={sendingDoc===file.id}
-                    style={{padding:"8px 14px",borderRadius:8,background:sendingDoc===file.id?C.subtle:C.red,color:sendingDoc===file.id?C.muted:"#fff",
-                      fontSize:12,fontWeight:600,display:"flex",alignItems:"center",gap:6,flexShrink:0,opacity:sendingDoc===file.id?.6:1}}>
-                    <Icon name="send" size={14} color={sendingDoc===file.id?C.muted:"#fff"}/>
-                    {sendingDoc===file.id?"Sender...":"Send"}
-                  </button>
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <button onClick={()=>window.open(file.file_url,"_blank")}
+                      style={{padding:"7px 10px",borderRadius:8,background:C.subtle,fontSize:11,fontWeight:600,color:C.body,border:`1px solid ${C.line}`}}>
+                      Åpne
+                    </button>
+                    <button onClick={()=>handleSend(file)} disabled={sendingDoc===file.id}
+                      style={{padding:"7px 10px",borderRadius:8,background:sendingDoc===file.id?C.subtle:C.red,
+                        color:sendingDoc===file.id?C.muted:"#fff",fontSize:11,fontWeight:600,opacity:sendingDoc===file.id?.6:1}}>
+                      {sendingDoc===file.id?"Sender...":"Send"}
+                    </button>
+                    <button onClick={()=>handleDelete(file)}
+                      style={{padding:"7px 6px",borderRadius:8,background:C.subtle,border:`1px solid ${C.line}`}}>
+                      <Icon name="x" size={14} color={C.muted}/>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
