@@ -1405,16 +1405,60 @@ function App(){
 
     const handleSend=(file)=>{
       setSendFile(file);
-      setSendEmail("");
+      setSendingDoc(file.id);
+      // Trigger share immediately
+      (async()=>{
+        try{
+          const response=await fetch(file.file_url);
+          const blob=await response.blob();
+          const f=new File([blob],file.name,{type:blob.type});
+          if(navigator.share&&navigator.canShare&&navigator.canShare({files:[f]})){
+            await navigator.share({title:file.name,text:"Dokument fra YX Klar for Kunde",files:[f]});
+          }else{
+            const url=URL.createObjectURL(blob);
+            const a=document.createElement("a");
+            a.href=url;a.download=file.name;
+            document.body.appendChild(a);a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert("Filen er lastet ned. Legg den som vedlegg i e-posten din.");
+          }
+        }catch(err){
+          if(err.name!=="AbortError")console.error("Share failed:",err);
+        }
+        setSendingDoc(null);
+        setSendFile(null);
+      })();
     };
 
-    const confirmSend=()=>{
-      if(!sendEmail.trim()||!sendFile)return;
-      const subject=encodeURIComponent(sendFile.name);
-      const body=encodeURIComponent(`Hei!\n\nHer er dokumentet "${sendFile.name}" fra YX Klar for Kunde.\n\nÅpne filen her:\n${sendFile.file_url}\n\nMed vennlig hilsen\n${profile?.name||"Regionssjef"}`);
-      window.open(`mailto:${sendEmail}?subject=${subject}&body=${body}`,"_blank");
+    const confirmSend=async()=>{
+      if(!sendFile)return;
+      setSendingDoc(sendFile.id);
       setSendFile(null);
       setSendEmail("");
+      try{
+        const response=await fetch(sendFile.file_url);
+        const blob=await response.blob();
+        const file=new File([blob],sendFile.name,{type:blob.type});
+        if(navigator.share&&navigator.canShare&&navigator.canShare({files:[file]})){
+          await navigator.share({
+            title:sendFile.name,
+            text:`Dokument fra YX Klar for Kunde`,
+            files:[file],
+          });
+        }else{
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement("a");
+          a.href=url;a.download=sendFile.name;
+          document.body.appendChild(a);a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          alert("Filen er lastet ned. Legg den som vedlegg i e-posten din.");
+        }
+      }catch(err){
+        if(err.name!=="AbortError")console.error("Share failed:",err);
+      }
+      setSendingDoc(null);
     };
 
     const handleDelete=async(file)=>{
@@ -1513,32 +1557,6 @@ function App(){
           </div>
         )}
 
-        {/* Send email modal */}
-        {sendFile&&(
-          <>
-            <div onClick={()=>setSendFile(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:200}}/>
-            <div style={{position:"fixed",bottom:0,left:0,right:0,maxWidth:720,margin:"0 auto",background:C.surface,borderRadius:"20px 20px 0 0",padding:24,zIndex:201,boxShadow:"0 -4px 24px rgba(0,0,0,.15)"}}>
-              <div style={{fontSize:16,fontWeight:700,color:C.ink,marginBottom:4}}>Send dokument</div>
-              <div style={{fontSize:13,color:C.muted,marginBottom:16,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sendFile.name}</div>
-              <label style={{fontSize:13,fontWeight:600,color:C.body,display:"block",marginBottom:6}}>E-postadresse</label>
-              <input type="email" value={sendEmail} onChange={e=>setSendEmail(e.target.value)}
-                placeholder="navn@stasjon.no" autoFocus
-                onKeyDown={e=>e.key==="Enter"&&confirmSend()}
-                style={{width:"100%",padding:"14px 16px",borderRadius:10,border:`1px solid ${C.lineStrong}`,background:C.subtle,fontSize:15,marginBottom:16}}/>
-              <div style={{display:"flex",gap:10}}>
-                <button onClick={()=>setSendFile(null)}
-                  style={{flex:1,padding:14,borderRadius:10,border:`1px solid ${C.line}`,fontWeight:600,fontSize:14,color:C.muted}}>
-                  Avbryt
-                </button>
-                <button onClick={confirmSend} disabled={!sendEmail.trim()||!sendEmail.includes("@")}
-                  style={{flex:1,padding:14,borderRadius:10,background:(!sendEmail.trim()||!sendEmail.includes("@"))?C.faint:C.red,
-                    color:"#fff",fontWeight:600,fontSize:14}}>
-                  Send
-                </button>
-              </div>
-            </div>
-          </>
-        )}
       </div>
     );
   }
