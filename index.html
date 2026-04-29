@@ -1410,12 +1410,11 @@ function App(){
 
     const confirmSend=()=>{
       if(!sendEmail.trim()||!sendFile)return;
-      setSendingDoc(sendFile.id);
+      const subject=encodeURIComponent(sendFile.name);
+      const body=encodeURIComponent(`Hei!\n\nHer er dokumentet "${sendFile.name}" fra YX Klar for Kunde.\n\nÅpne filen her:\n${sendFile.file_url}\n\nMed vennlig hilsen\n${profile?.name||"Regionssjef"}`);
+      window.open(`mailto:${sendEmail}?subject=${subject}&body=${body}`,"_blank");
       setSendFile(null);
-      setTimeout(()=>{
-        setSendingDoc(null);
-        alert(`"${sendFile.name}" er sendt til ${sendEmail}.`);
-      },1200);
+      setSendEmail("");
     };
 
     const handleDelete=async(file)=>{
