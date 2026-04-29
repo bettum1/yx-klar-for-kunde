@@ -597,6 +597,8 @@ function App(){
   const[menuOpen,setMenuOpen]=useState(false);
   const[openFolder,setOpenFolder]=useState(null);
   const[sendingDoc,setSendingDoc]=useState(null);
+  const[sendEmail,setSendEmail]=useState("");
+  const[sendFile,setSendFile]=useState(null);
   const[folderDocs,setFolderDocs]=useState([]);
   const[uploadingFile,setUploadingFile]=useState(false);
   const[section,setSection]=useState("kfk"); // "kfk" | "sales" | "campaign" | "filer"
@@ -1402,10 +1404,17 @@ function App(){
     };
 
     const handleSend=(file)=>{
-      setSendingDoc(file.id);
+      setSendFile(file);
+      setSendEmail("");
+    };
+
+    const confirmSend=()=>{
+      if(!sendEmail.trim()||!sendFile)return;
+      setSendingDoc(sendFile.id);
+      setSendFile(null);
       setTimeout(()=>{
         setSendingDoc(null);
-        alert(`"${file.name}" er sendt til stasjonen.`);
+        alert(`"${sendFile.name}" er sendt til ${sendEmail}.`);
       },1200);
     };
 
@@ -1503,6 +1512,33 @@ function App(){
               ))}
             </div>
           </div>
+        )}
+
+        {/* Send email modal */}
+        {sendFile&&(
+          <>
+            <div onClick={()=>setSendFile(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:200}}/>
+            <div style={{position:"fixed",bottom:0,left:0,right:0,maxWidth:720,margin:"0 auto",background:C.surface,borderRadius:"20px 20px 0 0",padding:24,zIndex:201,boxShadow:"0 -4px 24px rgba(0,0,0,.15)"}}>
+              <div style={{fontSize:16,fontWeight:700,color:C.ink,marginBottom:4}}>Send dokument</div>
+              <div style={{fontSize:13,color:C.muted,marginBottom:16,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sendFile.name}</div>
+              <label style={{fontSize:13,fontWeight:600,color:C.body,display:"block",marginBottom:6}}>E-postadresse</label>
+              <input type="email" value={sendEmail} onChange={e=>setSendEmail(e.target.value)}
+                placeholder="navn@stasjon.no" autoFocus
+                onKeyDown={e=>e.key==="Enter"&&confirmSend()}
+                style={{width:"100%",padding:"14px 16px",borderRadius:10,border:`1px solid ${C.lineStrong}`,background:C.subtle,fontSize:15,marginBottom:16}}/>
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setSendFile(null)}
+                  style={{flex:1,padding:14,borderRadius:10,border:`1px solid ${C.line}`,fontWeight:600,fontSize:14,color:C.muted}}>
+                  Avbryt
+                </button>
+                <button onClick={confirmSend} disabled={!sendEmail.trim()||!sendEmail.includes("@")}
+                  style={{flex:1,padding:14,borderRadius:10,background:(!sendEmail.trim()||!sendEmail.includes("@"))?C.faint:C.red,
+                    color:"#fff",fontWeight:600,fontSize:14}}>
+                  Send
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
     );
