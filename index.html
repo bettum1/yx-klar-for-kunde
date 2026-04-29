@@ -595,6 +595,8 @@ function App(){
   const[showPatterns,setShowPatterns]=useState(false);
   const[visitSort,setVisitSort]=useState("distance");
   const[menuOpen,setMenuOpen]=useState(false);
+  const[openFolder,setOpenFolder]=useState(null);
+  const[sendingDoc,setSendingDoc]=useState(null);
   const[section,setSection]=useState("kfk"); // "kfk" | "sales" | "campaign" | "filer"
   const[activeCampItem,setActiveCampItem]=useState(null);
   const switchSection=(s)=>{
@@ -602,6 +604,7 @@ function App(){
     if(s==="kfk")setView("home");
     setStationView(null);
     setActiveCampItem(null);
+    setOpenFolder(null);
   };
   const[showPlanModal,setShowPlanModal]=useState(null); // {station} or null
   const[planDate,setPlanDate]=useState("");
@@ -1357,8 +1360,7 @@ function App(){
       {id:"hms",name:"HMS-rutiner",icon:"📁",color:"#F5C518",count:0,desc:"HMS-dokumenter, beredskapsplaner og sjekklister"},
       {id:"renhold",name:"Renholdsrutiner",icon:"📁",color:"#F5C518",count:0,desc:"Renholdsrutiner, sjekklister og veiledninger"},
     ];
-    const[openFolder,setOpenFolder]=useState(null);
-    const[sendingDoc,setSendingDoc]=useState(null);
+    // State managed at top level: openFolder, sendingDoc
     
     const demoFiles={
       kampanje:[
