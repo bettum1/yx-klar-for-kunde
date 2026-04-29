@@ -1403,32 +1403,27 @@ function App(){
       setUploadingFile(false);
     };
 
-    const handleSend=(file)=>{
-      setSendFile(file);
+    const handleSend=async(file)=>{
       setSendingDoc(file.id);
-      // Trigger share immediately
-      (async()=>{
-        try{
-          const response=await fetch(file.file_url);
-          const blob=await response.blob();
-          const f=new File([blob],file.name,{type:blob.type});
-          if(navigator.share&&navigator.canShare&&navigator.canShare({files:[f]})){
-            await navigator.share({title:file.name,text:"Dokument fra YX Klar for Kunde",files:[f]});
-          }else{
-            const url=URL.createObjectURL(blob);
-            const a=document.createElement("a");
-            a.href=url;a.download=file.name;
-            document.body.appendChild(a);a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            alert("Filen er lastet ned. Legg den som vedlegg i e-posten din.");
-          }
-        }catch(err){
-          if(err.name!=="AbortError")console.error("Share failed:",err);
+      try{
+        // Try native share API first (works on modern iOS/Android)
+        if(navigator.share){
+          await navigator.share({
+            title:file.name,
+            text:`Dokument fra YX: ${file.name}`,
+            url:file.file_url,
+          });
+        }else{
+          // Fallback: open file in new tab where user can share manually
+          window.open(file.file_url,"_blank");
         }
-        setSendingDoc(null);
-        setSendFile(null);
-      })();
+      }catch(err){
+        if(err.name!=="AbortError"){
+          // Share was cancelled or failed — open file instead
+          window.open(file.file_url,"_blank");
+        }
+      }
+      setSendingDoc(null);
     };
 
     const confirmSend=async()=>{
